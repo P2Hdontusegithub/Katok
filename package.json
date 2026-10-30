@@ -1,0 +1,30 @@
+{
+  "name": "ka-tok",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ka-tok — trò chơi đố vui đua ngựa kiểu Kahoot, chạy local cho sự kiện onsite",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node build.mjs && node --disable-warning=ExperimentalWarning dist/server.js",
+    "dev": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "bots": "node scripts/bots.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/baloo-2": "^5.3.0",
+    "express": "^5.3.0",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.6",
+    "@types/qrcode": "^1.5.6",
+    "esbuild": "^0.28.2",
+    "socket.io-client": "^4.8.4",
+    "typescript": "^7.0.2"
+  }
+}

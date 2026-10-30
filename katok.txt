@@ -1,0 +1,20 @@
+# Mô tả trò chơi
+- Tên (dự định): Ka-tok
+- Mô tả: web trò chơi (dạng như Kahoot) chạy local để mở chơi trong một sự kiện onsite, chỉ cần kết nối mạng chung/4G
+- Giao diện thân thiện như Kahoot, có thể hơi cartoon, màu tươi, animation mượt
+- Tech stack: Vanilla HTML/CSS/TS, socketio (?), database local
+- Theo dạng đua ngựa - mỗi người chơi trên một làn đường đua vô hạn, màn hình tự chỉnh theo tiến trình tất cả người chơi
+## Trình tự trò chơi (Giống Kahoot)
+- Màn hình câu hỏi
+	- Mỗi lượt gồm câu hỏi và các phương án trả lời A, B, C, D (hoặc theo hình giống Kahoot)
+	- Có bộ đếm thời gian còn lại khi mới lộ diện câu hỏi và reng khi hết giờ
+	- Mỗi người chơi chọn một đáp án sẽ hiển thị thời gian chọn được để xem ai nhanh nhất - được cộng điểm cao nhất = chạy lên xa nhất (cộng điểm như nào sẽ set sau)
+	- Chuyển qua màn hình kết quả mỗi lượt gồm bảng có cột "Thứ tự", "", … 
+## Màn hình tính điểm nhập thủ công (để backup)
+
+## UX
+Khi vào web localhost chọn giữa Player và Host, Host thì nhập đúng mật khẩu để vào (màn hình Host sẽ được chiếu trực tiếp cho người chơi và khán giả, hiện luôn câu hỏi và 4 đáp án); Player thì đơn giản là 4 kí tự / hình đáp án - như Kahoot
+## Random ideas
+- Câu hỏi được đặt bằng JSON cho dễ
+
+Viết README hướng dẫn cài đặt kĩ.

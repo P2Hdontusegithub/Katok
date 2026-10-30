@@ -1,0 +1,44 @@
+{
+  "title": "Bộ câu hỏi mẫu",
+  "defaults": { "time": 20, "readTime": 4, "points": 1 },
+  "shuffleQuestions": false,
+  "shuffleAnswers": false,
+  "questions": [
+    {
+      "question": "Thủ đô của Việt Nam là thành phố nào?",
+      "answers": ["Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng", "Huế"],
+      "correct": "A"
+    },
+    {
+      "question": "Con vật nào chạy nhanh nhất trên cạn?",
+      "answers": ["Ngựa", "Báo săn (Cheetah)", "Sư tử", "Linh dương"],
+      "correct": 1,
+      "time": 15
+    },
+    {
+      "question": "Trái đất quay quanh Mặt trời.",
+      "answers": ["Đúng", "Sai"],
+      "correct": "A",
+      "time": 10
+    },
+    {
+      "question": "Những số nào là số nguyên tố?",
+      "answers": ["2", "9", "13", "21"],
+      "correct": ["A", "C"],
+      "time": 20
+    },
+    {
+      "question": "Một con ngựa có bao nhiêu chân?",
+      "answers": ["2", "3", "4", "6"],
+      "correct": "C",
+      "time": 10
+    },
+    {
+      "question": "⭐ CÂU NHÂN ĐÔI ĐIỂM: Ngựa thuộc họ động vật nào?",
+      "answers": ["Họ Ngựa (Equidae)", "Họ Trâu bò (Bovidae)", "Họ Mèo (Felidae)", "Họ Chó (Canidae)"],
+      "correct": 0,
+      "time": 20,
+      "points": 2
+    }
+  ]
+}
