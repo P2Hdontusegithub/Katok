@@ -1,0 +1,15 @@
+{
+  "port": 3000,
+  "hostPassword": "katok2026",
+  "publicUrl": "",
+  "latencyCompensationMs": 800,
+  "autoEndWhenAllAnswered": true,
+  "maxPlayers": 180,
+  "scoring": {
+    "maxPoints": 1000,
+    "minPoints": 500,
+    "wrongPoints": 0,
+    "noAnswerPoints": 0,
+    "speedBonus": [300, 200, 100]
+  }
+}

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#3b1478" />
+  <title>Ka-tok · Host</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/fonts/baloo/index.css" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/host.css" />
+</head>
+<body class="host">
+  <section id="login" class="center-screen">
+    <div id="login-card" class="card login-card pop-in">
+      <h1 class="logo">Ka<span>-</span>tok</h1>
+      <p>Màn hình <b>Host</b> — nhập mật khẩu để điều khiển</p>
+      <form id="login-form">
+        <input id="password" type="password" placeholder="Mật khẩu host" autocomplete="current-password" />
+        <button class="btn big" type="submit">Vào điều khiển</button>
+      </form>
+      <div id="login-error" class="error-text"></div>
+      <a class="back-link" href="/">← Quay lại</a>
+    </div>
+  </section>
+
+  <section id="app" hidden>
+    <header class="topbar">
+      <div class="bar-left">
+        <span class="bar-logo">Ka<span>-</span>tok</span>
+        <span id="bar-set" class="bar-pill"></span>
+        <span id="bar-q" class="bar-pill"></span>
+        <span id="bar-players" class="bar-pill"></span>
+      </div>
+      <div class="bar-right">
+        <button id="btn-race" class="icon-btn" title="Xem đường đua" hidden>🏇</button>
+        <button id="btn-board" class="icon-btn" title="Xem bảng điểm" hidden>📋</button>
+        <button id="btn-manual" class="icon-btn" title="Chấm điểm thủ công (M)">✍️</button>
+        <button id="btn-sound" class="icon-btn" title="Bật/tắt âm thanh">🔊</button>
+        <button id="btn-full" class="icon-btn" title="Toàn màn hình (F)">⛶</button>
+        <div class="menu-wrap">
+          <button id="btn-menu" class="icon-btn" title="Thêm">☰</button>
+          <div id="menu" class="menu" hidden>
+            <button data-act="end">🏁 Kết thúc game</button>
+            <button data-act="newGame">🔁 Ván mới (giữ người chơi)</button>
+            <button data-act="toLobby">🏠 Về sảnh & xoá người chơi</button>
+            <button data-act="export">⬇ Xuất kết quả CSV</button>
+            <button data-act="reload">⟳ Tải lại câu hỏi</button>
+            <button data-act="logout">🚪 Đăng xuất host</button>
+          </div>
+        </div>
+      </div>
+    </header>
+    <main id="stage" class="stage"></main>
+    <button id="next" class="btn big next-btn" title="Phím tắt: Space / Enter / →"></button>
+  </section>
+  <script type="module" src="/js/host.js"></script>
+</body>
+</html>
