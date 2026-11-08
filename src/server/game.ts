@@ -64,6 +64,7 @@ export class Game {
   private restored = false;
   joinUrls: string[] = [];
   joinUrl = '';
+  lanWarning: string | null = null;
 
   constructor(
     private cfg: Config,
@@ -685,6 +686,7 @@ export class Game {
       adjustments: this.adjustments.slice(0, 50),
       joinUrls: this.joinUrls,
       joinUrl: this.joinUrl,
+      lanWarning: this.lanWarning,
       restored: this.restored,
     };
   }

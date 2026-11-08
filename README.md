@@ -145,7 +145,15 @@ Cách này cần đưa server ra Internet bằng một *đường hầm* (tunnel
 
 Lần đầu chạy, Windows sẽ hỏi *"Allow Node.js to communicate on these networks"*. Hãy **tích cả Private và Public** rồi bấm **Allow access**.
 
-Nếu lỡ bấm *Cancel*, hoặc điện thoại không vào được dù chung mạng:
+**Dấu hiệu:** điện thoại mở link `http://192.168.x.x:3000` thì trang không tải được, nhưng dùng tunnel (cách C) lại vào được. Từ v1.1, Ka-tok tự kiểm tra tường lửa khi khởi động và in cảnh báo trong terminal, đồng thời hiện dòng chữ đỏ dưới mã QR ở sảnh chờ.
+
+**Cách sửa nhanh:** mở **PowerShell** bằng *Run as administrator* rồi chạy lệnh dưới đây (đổi `3000` nếu bạn đã đổi `port`):
+
+```bash
+netsh advfirewall firewall add rule name="Ka-tok" dir=in action=allow protocol=TCP localport=3000 profile=any
+```
+
+Hoặc làm thủ công, nếu lỡ bấm *Cancel* hay điện thoại không vào được dù chung mạng:
 
 1. Mở **Windows Security → Firewall & network protection → Allow an app through firewall**.
 2. Bấm **Change settings**, tìm **Node.js JavaScript Runtime** và tích cả hai cột **Private** và **Public**.

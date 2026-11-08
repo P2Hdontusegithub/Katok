@@ -104,6 +104,8 @@ export interface HostState {
   adjustments: Adjustment[];
   joinUrls: string[];
   joinUrl: string;
+  /** Set when phones on the LAN probably cannot reach the server (Windows firewall). */
+  lanWarning: string | null;
   restored: boolean;
 }
 

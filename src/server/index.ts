@@ -9,6 +9,7 @@ import type { Ack, HostAction } from '../shared/types';
 import { loadConfig, ROOT } from './config';
 import { Db } from './db';
 import { Game } from './game';
+import { checkFirewall, FIREWALL_RULE } from './firewall';
 import { lanAddresses } from './net';
 import { loadQuestionSets } from './questions';
 
@@ -258,5 +259,27 @@ server.listen(cfg.port, '0.0.0.0', () => {
   for (const u of game.joinUrls.slice(0, -1)) console.log(`     → ${u}`);
   if (!ips.length) console.log('     (không tìm thấy mạng LAN — hãy kết nối Wi-Fi/hotspot)');
   if (restored) console.log(`\n  ♻️  Đã khôi phục ván chơi trước khi tắt máy chủ.`);
+
+  // Phones on the LAN fail to load the page while tunnels still work: that is
+  // the Windows firewall blocking inbound connections. Warn in the terminal
+  // and on the host lobby screen.
+  void checkFirewall(cfg.port).then((fw) => {
+    if (!fw || (fw.allowed && !fw.blocked)) return;
+    const why = fw.blocked
+      ? 'Tường lửa Windows đang CHẶN Node.js'
+      : `Tường lửa Windows chưa mở cổng ${cfg.port} (mạng đang là "${fw.profiles.join(', ') || '?'}")`;
+    game.lanWarning = `${why} — điện thoại trong mạng LAN sẽ không vào được. Xem cửa sổ terminal hoặc mục "Tường lửa Windows" trong README để mở cổng.`;
+    console.warn(
+      `\n⚠️  ${why}.\n   Điện thoại chung Wi-Fi sẽ KHÔNG mở được trang (chỉ tunnel mới chạy).\n` +
+        `   Cách sửa: mở PowerShell bằng "Run as administrator" rồi chạy:\n\n` +
+        `     netsh advfirewall firewall add rule name="${FIREWALL_RULE}" dir=in action=allow protocol=TCP localport=${cfg.port} profile=any\n` +
+        (fw.blocked
+          ? `\n   Và tắt luật đang chặn Node.js: Windows Security → Firewall → Advanced settings → Inbound Rules\n` +
+            `   → tắt (Disable) các dòng "Node.js" có biểu tượng cấm màu đỏ.\n`
+          : '') +
+        `\n   Chi tiết: README, mục "Tường lửa Windows".\n`,
+    );
+    io.to('hosts').emit('host:state', game.hostState());
+  });
   console.log(`${line}\n  Nhấn Ctrl + C để tắt.\n`);
 });

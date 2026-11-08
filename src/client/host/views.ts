@@ -29,6 +29,7 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
         <img class="qr" alt="Mã QR tham gia" />
         <div class="join-hint">hoặc quét mã QR 📱</div>
         <select class="url-select" title="Chọn địa chỉ mạng hiển thị"></select>
+        <div class="lan-warning" hidden></div>
       </aside>
       <section class="lobby-main">
         <div class="lobby-logo"><h1 class="logo big">Ka<span>-</span>tok</h1><span class="logo-horse">${horseSvg(3, 'running')}</span></div>
@@ -56,6 +57,7 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
   const urlEl = stage.querySelector<HTMLElement>('.join-url')!;
   const qr = stage.querySelector<HTMLImageElement>('.qr')!;
   const urlSel = stage.querySelector<HTMLSelectElement>('.url-select')!;
+  const lanWarn = stage.querySelector<HTMLElement>('.lan-warning')!;
   const setSel = stage.querySelector<HTMLSelectElement>('.set-select')!;
   const errors = stage.querySelector<HTMLElement>('.set-errors')!;
   const countEl = stage.querySelector<HTMLElement>('.lobby-count b')!;
@@ -166,6 +168,10 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
 
   const update = (s: HostState) => {
     current = s;
+    // Only relevant while the QR points to a LAN IP (a tunnel bypasses the firewall).
+    const lanUrl = /^https?:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(s.joinUrl);
+    lanWarn.hidden = !(s.lanWarning && lanUrl);
+    if (!lanWarn.hidden) lanWarn.textContent = `⚠️ ${s.lanWarning}`;
     const shown = s.joinUrl.replace(/^https?:\/\//, '');
     if (urlEl.textContent !== shown) {
       urlEl.textContent = shown;

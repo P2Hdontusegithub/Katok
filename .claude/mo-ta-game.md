@@ -1,6 +1,6 @@
 # Ka-tok — Mô tả chi tiết cách game hoạt động (tài liệu cho AI)
 
-> Tài liệu này mô tả **trạng thái hiện tại của mã nguồn** (phiên bản `1.0.0` trong `package.json`, ngày 2026-11-08) để AI/lập trình viên đọc lại nhanh trước khi sửa code.
+> Tài liệu này mô tả **trạng thái hiện tại của mã nguồn** (phiên bản `1.1.0` trong `package.json`, ngày 2026-11-08) để AI/lập trình viên đọc lại nhanh trước khi sửa code.
 > Khi sửa hành vi game, hãy cập nhật file này cho khớp.
 >
 > Nguồn gốc: prompt ban đầu ở `ideas/Mo-ta-katok.txt`; các ghi chú điều chỉnh/ý tưởng tiếp theo ở `ideas/Dieu-chinh-game-v1.txt`; yêu cầu soạn bộ câu hỏi ở `ideas/Yeu-cau-cau-hoi.txt`. Hướng dẫn cho người dùng cuối nằm ở `README.md`.
