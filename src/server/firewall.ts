@@ -9,6 +9,12 @@ export interface FirewallStatus {
   blocked: boolean;
   /** Active network profile(s), e.g. "Public". */
   profiles: string[];
+  /**
+   * Third-party firewalls registered with Windows Security (e.g. Symantec
+   * Endpoint Protection). When present they replace Windows Firewall, so its
+   * rules — and `allowed` above — say nothing about whether phones get through.
+   */
+  thirdParty: string[];
 }
 
 /**
@@ -34,7 +40,17 @@ foreach ($name in @($apps.Keys)) {
   if ($apps[$name] -ine '${node}') { continue }
   if ($rules[$name].Action -eq 'Block') { $block = $true } elseif ($rules[$name].Action -eq 'Allow') { $allow = $true }
 }
-foreach ($pf in (Get-NetFirewallPortFilter)) {
+# Without admin rights the bulk listing can stop half-way ("Access is denied"),
+# so Allow rules not bound to a program and missing from it are queried one by one.
+$ports = @{}
+foreach ($pf in (Get-NetFirewallPortFilter -ErrorAction SilentlyContinue)) { if ($rules.ContainsKey($pf.InstanceID)) { $ports[$pf.InstanceID] = $pf } }
+foreach ($name in @($rules.Keys)) {
+  $app = $apps[$name]
+  if ($ports.ContainsKey($name) -or $rules[$name].Action -ne 'Allow' -or ($app -and $app -ne 'Any')) { continue }
+  $pf = $rules[$name] | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
+  if ($pf) { $ports[$name] = $pf }
+}
+foreach ($pf in $ports.Values) {
   $r = $rules[$pf.InstanceID]
   if (-not $r -or $r.Action -ne 'Allow') { continue }
   $app = $apps[$pf.InstanceID]
@@ -42,17 +58,24 @@ foreach ($pf in (Get-NetFirewallPortFilter)) {
   if (($pf.Protocol -eq 'TCP' -or $pf.Protocol -eq 'Any') -and (@($pf.LocalPort) -contains '${port}')) { $allow = $true }
 }
 if ($off) { $allow = $true }
-@{ allowed = $allow; blocked = $block; profiles = $profiles } | ConvertTo-Json -Compress`;
+# Bits 12-13 of productState = 01 means the product is switched on.
+$third = @(Get-CimInstance -Namespace root/SecurityCenter2 -ClassName FirewallProduct | Where-Object { (($_.productState -shr 12) -band 3) -eq 1 } | ForEach-Object { [string]$_.displayName })
+@{ allowed = $allow; blocked = $block; profiles = $profiles; thirdParty = $third } | ConvertTo-Json -Compress`;
   return new Promise((resolve) => {
     execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
-      { timeout: 20000, windowsHide: true },
+      { timeout: 45000, windowsHide: true },
       (err, stdout) => {
         if (err) return resolve(null);
         try {
           const r = JSON.parse(stdout.trim());
-          resolve({ allowed: !!r.allowed, blocked: !!r.blocked, profiles: ([] as string[]).concat(r.profiles ?? []) });
+          resolve({
+            allowed: !!r.allowed,
+            blocked: !!r.blocked,
+            profiles: ([] as string[]).concat(r.profiles ?? []),
+            thirdParty: ([] as string[]).concat(r.thirdParty ?? []).filter(Boolean),
+          });
         } catch {
           resolve(null);
         }

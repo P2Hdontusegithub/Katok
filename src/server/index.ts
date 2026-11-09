@@ -264,7 +264,23 @@ server.listen(cfg.port, '0.0.0.0', () => {
   // the Windows firewall blocking inbound connections. Warn in the terminal
   // and on the host lobby screen.
   void checkFirewall(cfg.port).then((fw) => {
-    if (!fw || (fw.allowed && !fw.blocked)) return;
+    if (!fw) return;
+    if (fw.thirdParty.length) {
+      // A third-party firewall replaces Windows Firewall: its own rules decide.
+      const name = fw.thirdParty.join(', ');
+      game.lanWarning =
+        `Máy đang dùng tường lửa của ${name} (thay cho tường lửa Windows) — nếu điện thoại trong mạng LAN không vào được, ` +
+        `hãy thêm luật cho phép cổng ${cfg.port} trong ${name}, hoặc dùng tunnel. Chi tiết: README, mục "Tường lửa".`;
+      console.warn(
+        `\n⚠️  Máy đang dùng tường lửa của ${name}, nó THAY THẾ tường lửa Windows:\n` +
+          `   luật mở cổng trong Windows (netsh, "Allow an app…") KHÔNG có tác dụng.\n` +
+          `   Nếu điện thoại chung Wi-Fi không mở được trang, hãy thêm luật cho phép TCP cổng ${cfg.port}\n` +
+          `   (chiều vào) ngay trong ${name}, hoặc dùng tunnel. Chi tiết: README, mục "Tường lửa".\n`,
+      );
+      io.to('hosts').emit('host:state', game.hostState());
+      return;
+    }
+    if (fw.allowed && !fw.blocked) return;
     const why = fw.blocked
       ? 'Tường lửa Windows đang CHẶN Node.js'
       : `Tường lửa Windows chưa mở cổng ${cfg.port} (mạng đang là "${fw.profiles.join(', ') || '?'}")`;

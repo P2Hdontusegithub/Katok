@@ -159,6 +159,19 @@ Hoặc làm thủ công, nếu lỡ bấm *Cancel* hay điện thoại không v�
 2. Bấm **Change settings**, tìm **Node.js JavaScript Runtime** và tích cả hai cột **Private** và **Public**.
 3. Nên đặt mạng Wi-Fi đang dùng là **Private**: *Settings → Network & Internet → Wi-Fi → (tên mạng) → Network profile type → Private*.
 
+#### Máy có phần mềm diệt virus kèm tường lửa (Symantec, Kaspersky, ESET, Norton, Bitdefender…)
+
+Các phần mềm này **thay thế** tường lửa Windows. Khi đó, mọi luật bạn thêm trong Windows (lệnh `netsh` ở trên, *Allow an app…*) đều **không có tác dụng**. Từ v1.1, Ka-tok tự phát hiện trường hợp này và ghi rõ tên phần mềm trong cảnh báo.
+
+Hãy thêm luật ngay trong phần mềm đó: cho phép kết nối **chiều vào (incoming)**, giao thức **TCP**, **cổng cục bộ 3000**. Ví dụ với **Symantec Endpoint Protection**:
+
+1. Mở Symantec Endpoint Protection (biểu tượng ở khay hệ thống).
+2. Chọn **Change Settings**. Ở mục **Network and Host Exploit Mitigation** (bản cũ ghi *Network Threat Protection*), bấm **Configure Settings / Options**, rồi chọn **Configure Firewall Rules**.
+3. Bấm **Add**, đặt tên `Ka-tok`, chọn **Allow this traffic**. Ở thẻ **Ports and Protocols**, chọn **TCP**, **Local ports** = `3000`, **Traffic direction** = **Incoming**. Bấm **OK**.
+4. Di chuyển luật vừa tạo lên **đầu danh sách** (luật ở trên được ưu tiên), rồi bấm **OK** để lưu.
+
+Tên mục có thể khác đôi chút giữa các phiên bản. Nếu máy do công ty quản lý, thường bạn không sửa được luật; khi đó hãy nhờ IT hoặc dùng **tunnel** (cách C).
+
 Trên **macOS**, nếu hệ thống hỏi *"Do you want the application node to accept incoming network connections?"*, hãy chọn **Allow**.
 
 ### Máy có nhiều mạng
