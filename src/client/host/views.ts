@@ -4,6 +4,7 @@ import { countTo, esc, fmtPoints, fmtTime } from '../common/dom';
 import { horseSvg, playerColor } from '../common/horse';
 import { ANSWER_COLORS, ANSWER_NAMES, shapeSvg } from '../common/shapes';
 import { sfx } from '../common/sound';
+import { bindJoinCard, JOIN_CARD_HTML } from './join';
 import type { RaceTrack } from './race';
 
 export interface Ctx {
@@ -23,14 +24,7 @@ const qLabel = (s: HostState) => (s.question ? `Câu ${s.question.index + 1} / $
 export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
   stage.innerHTML = `
     <div class="lobby">
-      <aside class="join-card pop-in">
-        <div class="join-label">Mở trình duyệt trên điện thoại, vào:</div>
-        <div class="join-url"></div>
-        <img class="qr" alt="Mã QR tham gia" />
-        <div class="join-hint">hoặc quét mã QR 📱</div>
-        <select class="url-select" title="Chọn địa chỉ mạng hiển thị"></select>
-        <div class="lan-warning" hidden></div>
-      </aside>
+      <aside class="join-card pop-in">${JOIN_CARD_HTML}</aside>
       <section class="lobby-main">
         <div class="lobby-logo"><h1 class="logo big">Ka<span>-</span>tok</h1><span class="logo-horse">${horseSvg(3, 'running')}</span></div>
         <div class="set-picker">
@@ -54,10 +48,7 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
         </div>
       </section>
     </div>`;
-  const urlEl = stage.querySelector<HTMLElement>('.join-url')!;
-  const qr = stage.querySelector<HTMLImageElement>('.qr')!;
-  const urlSel = stage.querySelector<HTMLSelectElement>('.url-select')!;
-  const lanWarn = stage.querySelector<HTMLElement>('.lan-warning')!;
+  const updateJoin = bindJoinCard(stage.querySelector<HTMLElement>('.join-card')!, ctx);
   const setSel = stage.querySelector<HTMLSelectElement>('.set-select')!;
   const errors = stage.querySelector<HTMLElement>('.set-errors')!;
   const countEl = stage.querySelector<HTMLElement>('.lobby-count b')!;
@@ -150,15 +141,6 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
       .join('');
   };
 
-  urlSel.onchange = () => {
-    if (urlSel.value === '__custom') {
-      const url = prompt('Nhập địa chỉ cho người chơi (vd: https://ten-ngau-nhien.trycloudflare.com):', 'https://');
-      if (url && url !== 'https://') ctx.send({ type: 'selectUrl', url });
-      urlSel.value = current.joinUrl;
-      return;
-    }
-    ctx.send({ type: 'selectUrl', url: urlSel.value });
-  };
   setSel.onchange = () => ctx.send({ type: 'selectSet', setId: setSel.value });
   stage.querySelector<HTMLElement>('.reload')!.onclick = () => ctx.send({ type: 'reloadQuestions' });
   bubbles.onclick = (e) => {
@@ -168,18 +150,7 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
 
   const update = (s: HostState) => {
     current = s;
-    // Only relevant while the QR points to a LAN IP (a tunnel bypasses the firewall).
-    const lanUrl = /^https?:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(s.joinUrl);
-    lanWarn.hidden = !(s.lanWarning && lanUrl);
-    if (!lanWarn.hidden) lanWarn.textContent = `⚠️ ${s.lanWarning}`;
-    const shown = s.joinUrl.replace(/^https?:\/\//, '');
-    if (urlEl.textContent !== shown) {
-      urlEl.textContent = shown;
-      qr.src = `/api/qr?text=${encodeURIComponent(s.joinUrl)}`;
-    }
-    urlSel.innerHTML =
-      s.joinUrls.map((u) => `<option ${u === s.joinUrl ? 'selected' : ''}>${esc(u)}</option>`).join('') +
-      '<option value="__custom">✎ Nhập địa chỉ khác…</option>';
+    updateJoin(s);
     setSel.innerHTML = s.questionSets
       .map((q) => `<option value="${esc(q.id)}" ${q.id === s.setId ? 'selected' : ''} ${q.count ? '' : 'disabled'}>${esc(q.title)} (${q.count} câu)</option>`)
       .join('') || '<option>— Chưa có file câu hỏi —</option>';

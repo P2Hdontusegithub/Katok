@@ -205,7 +205,8 @@ Client gửi (đều có ack `{ ok, error? }`):
 - Khi `listen`, `joinUrls` = `[publicUrl?] + http://<từng IP LAN>:port + http://localhost:port`; `joinUrl` mặc định là phần tử đầu.
 - Server lắng nghe `0.0.0.0`.
 - Ở sảnh host có ô chọn URL (danh sách trên + "✎ Nhập địa chỉ khác…" — cho dán link tunnel, ví dụ `cloudflared tunnel --url http://localhost:3000`). Action `selectUrl` chấp nhận mọi URL `http(s)://`, thêm vào đầu danh sách, QR cập nhật.
-- QR + link **chỉ hiển thị ở màn hình sảnh** (`lobbyView`), không có ở các màn hình khác trong lúc chơi.
+- Thẻ tham gia (link + QR + ô chọn URL + cảnh báo tường lửa) nằm ở `src/client/host/join.ts` (`JOIN_CARD_HTML` + `bindJoinCard`), dùng chung cho sảnh và lớp phủ.
+- Ngoài sảnh: nút **📱** trên thanh trên hoặc phím **J** mở lớp phủ QR lớn (`JoinPanel`), Esc/bấm ra ngoài để đóng. Trong lớp phủ có nút **📌 Ghim** → QR nhỏ ở góc dưới trái mọi màn hình (trừ sảnh), nhớ bằng `localStorage` `katok-join-pinned`; bấm QR nhỏ để phóng to.
 - `joinUrls`/`joinUrl` không nằm trong snapshot (tính lại mỗi lần khởi động; URL tự nhập sẽ mất khi restart).
 
 ## 12. Giao diện Host (`src/client/host/`)
@@ -278,7 +279,6 @@ CSV (`exportRows`): cột *Hạng, Người chơi, [Đội], Câu 1..N (điểm 
 - Tham gia bằng link tự nhập: `selectUrl` chỉ đổi URL hiển thị/QR, không đổi gì ở server. Bug "không vào được bằng link tự tạo, phải dùng cloudflare tunnel" được ghi trong `ideas/Dieu-chinh-game-v1.txt`, **chưa xác định nguyên nhân**.
 - Đông người (>100): đường đua 1 làn/người và bảng kết quả hiển thị tất cả → khó đọc trên màn hình lớn (vấn đề #1 trong `ideas/Dieu-chinh-game-v1.txt`).
 - Kết thúc chỉ có bục top 3 đội + top 3 cá nhân (vấn đề #2 — muốn thêm các màn "Trao giải").
-- QR/link chỉ ở sảnh (vấn đề #3 — muốn hiện trong lúc chơi).
 - `MAX_TEAM_SIZE = 3` là hằng số cứng trong `shared/types.ts` (bot cũng giả định 3).
 - Một số thao tác (rename, kick, adjust) không lọc theo phase — host có thể làm bất cứ lúc nào.
 - `scripts/bots.mjs` mặc định 18 bot với tên kiểu `A1 - 1 🤖` và tự xếp 3 bot/đội; README nói mặc định 8.
