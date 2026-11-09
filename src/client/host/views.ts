@@ -1,4 +1,4 @@
-import type { AwardEntry, DisplayMode, HostAction, HostState, PublicPlayer, PublicTeam, TeamRow } from '../../shared/types';
+import type { AwardEntry, DisplayMode, HostAction, HostState, PublicPlayer, PublicTeam, RoundRow, TeamRow } from '../../shared/types';
 import { ANSWER_LETTERS, AWARD_TITLES, PLAYER_COLORS } from '../../shared/types';
 import { countTo, esc, fmtPoints, fmtTime } from '../common/dom';
 import { horseSvg, playerColor } from '../common/horse';
@@ -366,12 +366,12 @@ export function raceView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
   stage.querySelector('.race-holder')!.appendChild(ctx.track.el);
   const update = (s: HostState) => {
     small.textContent = s.question ? `sau câu ${s.question.index + 1} / ${s.question.total}` : s.setTitle;
-    const { lanes, mode } = lanesFor(s);
+    const { lanes, mode, sorted } = lanesFor(s);
     const startFrom =
       mode === 'team'
         ? new Map((s.round?.teamRows ?? []).map((r) => [r.teamId, r.score - r.gained]))
         : new Map((s.round?.rows ?? []).map((r) => [r.playerId, r.score - r.gained]));
-    ctx.track.update(lanes, mode, true, startFrom);
+    ctx.track.update(lanes, mode, true, startFrom, sorted);
   };
   update(s);
   return { update };
@@ -385,6 +385,32 @@ function rankDelta(r: { prevRank: number; rank: number }) {
   return d > 0 ? `<span class="delta up">▲${d}</span>` : `<span class="delta down">▼${-d}</span>`;
 }
 
+type SortKey = 'rank' | 'name' | 'ans' | 'time' | 'gain' | 'total';
+
+const SORT_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'rank', label: 'Thứ tự' },
+  { key: 'name', label: 'Người chơi' },
+  { key: 'ans', label: 'Đáp án' },
+  { key: 'time', label: 'Thời gian' },
+  { key: 'gain', label: 'Điểm lượt này' },
+  { key: 'total', label: 'Tổng điểm' },
+];
+
+/** Sort order of the player rows; "time" = correct answers by speed, then wrong ones, then no answer. */
+function sortRows(rows: RoundRow[], key: SortKey, asc: boolean): RoundRow[] {
+  const group = (r: RoundRow) => (r.correct ? 0 : r.choice !== null ? 1 : 2);
+  const cmp: Record<SortKey, (a: RoundRow, b: RoundRow) => number> = {
+    rank: (a, b) => a.rank - b.rank,
+    name: (a, b) => a.name.localeCompare(b.name, 'vi'),
+    ans: (a, b) => group(a) - group(b) || (a.choice ?? 9) - (b.choice ?? 9),
+    time: (a, b) => group(a) - group(b) || (a.timeMs ?? Infinity) - (b.timeMs ?? Infinity),
+    gain: (a, b) => b.gained - a.gained,
+    total: (a, b) => b.score - a.score,
+  };
+  const dir = asc ? 1 : -1;
+  return [...rows].sort((a, b) => dir * cmp[key](a, b) || a.rank - b.rank || a.name.localeCompare(b.name, 'vi'));
+}
+
 export function boardView(stage: HTMLElement, s: HostState): View {
   stage.innerHTML = `
     <div class="board">
@@ -395,16 +421,35 @@ export function boardView(stage: HTMLElement, s: HostState): View {
   const thead = stage.querySelector<HTMLElement>('thead')!;
   const tbody = stage.querySelector<HTMLElement>('tbody')!;
   let animated = false;
+  // Default: who answered correctly the fastest on the question just played.
+  let sortKey: SortKey = 'time';
+  let asc = true;
+  let current = s;
+  thead.onclick = (e) => {
+    const k = (e.target as HTMLElement).closest<HTMLElement>('th[data-k]')?.dataset.k as SortKey | undefined;
+    if (!k) return;
+    if (k === sortKey) asc = !asc;
+    else {
+      sortKey = k;
+      asc = true;
+    }
+    update(current);
+  };
 
   const update = (s: HostState) => {
+    current = s;
     small.textContent = s.question ? `· sau câu ${s.question.index + 1} / ${s.question.total}` : '';
     stage.querySelector('.board')!.classList.toggle('team-board', s.teamView);
     const round = s.round;
     if (s.teamView) {
       renderTeamBoard(s, thead, tbody, animated);
     } else if (round) {
-      thead.innerHTML = `<tr><th>Thứ tự</th><th>Người chơi</th><th>Đáp án</th><th>Thời gian</th><th>Điểm lượt này</th><th>Tổng điểm</th></tr>`;
-      tbody.innerHTML = round.rows
+      thead.innerHTML = `<tr>${SORT_COLUMNS.map(
+        (c) => `<th data-k="${c.key}" class="sortable ${c.key === sortKey ? 'sorted' : ''}" title="Bấm để sắp xếp">${c.label}${
+          c.key === sortKey ? `<i class="sort-dir">${asc ? '▼' : '▲'}</i>` : ''
+        }</th>`,
+      ).join('')}</tr>`;
+      tbody.innerHTML = sortRows(round.rows, sortKey, asc)
         .map(
           (r, i) => `
         <tr class="${animated ? '' : 'row-in'} ${r.rank <= 3 ? `top top${r.rank}` : ''}" style="--pc:${playerColor(r.color)};animation-delay:${Math.min(i, 20) * 0.06}s">

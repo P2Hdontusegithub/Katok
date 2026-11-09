@@ -199,7 +199,8 @@ body.host { overflow: hidden; }
 }
 .race-scroll { position: absolute; inset: 6px; overflow-y: auto; overflow-x: hidden; border-radius: 16px; }
 .race-inner { position: relative; min-height: 100%; display: flex; flex-direction: column; }
-.race-markers { position: absolute; top: 0; bottom: 0; left: var(--label-w); right: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+/* Outside the scrolling area so the score labels stay visible while scrolling the lanes. */
+.race-markers { position: absolute; top: 6px; bottom: 6px; left: calc(var(--label-w) + 6px); right: 6px; pointer-events: none; z-index: 2; overflow: hidden; border-radius: 0 16px 16px 0; }
 .marker { position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-left: 3px dashed rgba(255, 255, 255, 0.55); }
 .marker span { position: absolute; top: 4px; left: 6px; background: rgba(0, 0, 0, 0.35); color: #fff; font-weight: 800; font-size: 0.85rem; padding: 0 8px; border-radius: 8px; white-space: nowrap; }
 .marker.start { border-left: 10px solid; border-image: repeating-linear-gradient(0deg, #fff 0 10px, #222 10px 20px) 10; }
@@ -421,3 +422,15 @@ body.host { overflow: hidden; }
 .top-players li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .top-players li small { opacity: 0.75; font-weight: 600; }
 .top-players li em { font-style: normal; color: var(--yellow); }
+
+/* ───── Many players ───── */
+.race:not(.teams) .race-row { flex-basis: 34px; }
+.race-leader {
+  position: absolute; top: 12px; right: 14px; z-index: 6; background: #ffd447; color: var(--ink); font-weight: 800;
+  padding: 4px 14px; border-radius: 999px; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.2); animation: popIn 0.3s both;
+}
+.results { font-size: clamp(1.1rem, 1.9vw, 1.9rem); }
+.results th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.results th.sortable:hover { color: var(--bg-2); }
+.results th.sorted { color: var(--bg-2); }
+.sort-dir { font-style: normal; margin-left: 4px; font-size: 0.85em; }

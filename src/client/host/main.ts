@@ -117,8 +117,8 @@ function render(s: HostState) {
 
   // Keep horses at their pre-round positions so the race screen can animate the gain.
   if (s.phase === 'lobby' || s.phase === 'getready' || s.phase === 'question') {
-    const { lanes, mode } = lanesFor(s);
-    ctx.track.update(lanes, mode, false);
+    const { lanes, mode, sorted } = lanesFor(s);
+    ctx.track.update(lanes, mode, false, undefined, sorted);
   }
 
   const key = keyFor(s);
@@ -195,6 +195,9 @@ function renderBar(s: HostState) {
   $('#bar-q').textContent = s.question ? `Câu ${s.question.index + 1}/${s.question.total}` : '';
   $('#bar-players').textContent = `👥 ${s.players.filter((p) => p.connected || p.manual).length}/${s.players.length}`;
   $<HTMLButtonElement>('#btn-join').hidden = s.phase === 'lobby';
+  const viewItem = $<HTMLButtonElement>('#menu-view');
+  viewItem.hidden = !s.teams.some((t) => t.memberIds.length);
+  viewItem.textContent = s.teamView ? '🐴 Hiển thị từng người' : '🏇 Hiển thị theo đội';
   $<HTMLButtonElement>('#btn-race').hidden = !['reveal', 'leaderboard', 'awards', 'teamfinal', 'final'].includes(s.phase);
   $<HTMLButtonElement>('#btn-board').hidden = !['race', 'awards', 'teamfinal', 'final'].includes(s.phase);
 }
@@ -259,6 +262,9 @@ menu.onclick = (e) => {
     case 'export':
       exportCsv();
       break;
+    case 'toggleView':
+      if (state) ctx.send({ type: 'setDisplayMode', mode: state.teamView ? 'player' : 'team' });
+      break;
     case 'reload':
       ctx.send({ type: 'reloadQuestions' }).then((ok) => ok && toast('Đã tải lại câu hỏi.', 'ok'));
       break;
@@ -282,6 +288,13 @@ document.addEventListener('keydown', (e) => {
   if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') {
     e.preventDefault();
     if (!nextBtn.hidden && !nextBtn.disabled) next();
+  } else if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].includes(e.key)) {
+    // Scroll the long lists (race lanes, leaderboard) — handy with a presenter remote.
+    const el = stage.querySelector<HTMLElement>('.race-scroll, .table-wrap, .final');
+    if (!el) return;
+    e.preventDefault();
+    const page = e.key.startsWith('Page') ? 0.85 : 0.3;
+    el.scrollBy({ top: (e.key.endsWith('Down') ? 1 : -1) * el.clientHeight * page, behavior: 'smooth' });
   } else if (e.key.toLowerCase() === 'm') manual.toggle();
   else if (e.key.toLowerCase() === 'f') $('#btn-full').click();
 });
