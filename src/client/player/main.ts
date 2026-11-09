@@ -1,5 +1,5 @@
 import type { PlayerState, TeamOption } from '../../shared/types';
-import { ANSWER_LETTERS, MAX_TEAM_SIZE } from '../../shared/types';
+import { ANSWER_LETTERS } from '../../shared/types';
 import { $, decorateBackground, esc, fmtPoints, fmtTime, toast } from '../common/dom';
 import { horseSvg, playerColor } from '../common/horse';
 import { call, connect, connectionBanner } from '../common/net';
@@ -35,16 +35,16 @@ let joinTeam: string | null = null;
 function teamButtons(selected: string | null) {
   return teams
     .map((t) => {
-      const full = t.count >= MAX_TEAM_SIZE && t.id !== selected;
+      const full = t.count >= t.max && t.id !== selected;
       return `<button type="button" class="team-btn ${t.id === selected ? 'on' : ''}" data-team="${t.id}" style="--pc:${playerColor(t.color)}" ${full ? 'disabled' : ''}>
-        <i class="dot"></i><span>${esc(t.name)}</span><small>${full ? 'Đủ người' : `${t.count}/${MAX_TEAM_SIZE}`}</small></button>`;
+        <i class="dot"></i><span>${esc(t.name)}</span><small>${full ? 'Đủ người' : `${t.count}/${t.max}`}</small></button>`;
     })
     .join('');
 }
 
 const joinTeams = $('#join-teams');
 function renderJoinTeams() {
-  const open = teams.filter((t) => t.count < MAX_TEAM_SIZE);
+  const open = teams.filter((t) => t.count < t.max);
   if (!open.some((t) => t.id === joinTeam)) joinTeam = null;
   joinTeams.hidden = !open.length;
   joinTeams.innerHTML = `<div class="team-pick-title">Chọn đội của bạn</div>${teamButtons(joinTeam)}`;

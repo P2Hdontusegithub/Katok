@@ -5,7 +5,11 @@ export type Phase = 'lobby' | 'getready' | 'question' | 'reveal' | 'race' | 'lea
 /** Screens shown once the game is over, in order (`awards` steps carry an index into `awards`). */
 export type EndStep = { phase: 'awards'; award: number } | { phase: 'final' } | { phase: 'teamfinal' };
 
-export const MAX_TEAM_SIZE = 3;
+/** Default for config.json → "maxTeamSize". */
+export const DEFAULT_TEAM_SIZE = 3;
+
+/** How the race and the leaderboard are drawn: one horse per player or per team ("auto" = per team when teams exist). */
+export type DisplayMode = 'auto' | 'player' | 'team';
 
 export interface PublicPlayer {
   id: string;
@@ -33,6 +37,8 @@ export interface TeamOption {
   name: string;
   color: number;
   count: number;
+  /** Maximum number of members. */
+  max: number;
 }
 
 export interface QuestionPublic {
@@ -67,11 +73,31 @@ export interface RoundRow {
   score: number;
 }
 
+/** One team's result for the last question (team view). Averages are over all members. */
+export interface TeamRow {
+  teamId: string;
+  name: string;
+  color: number;
+  rank: number;
+  prevRank: number;
+  members: number;
+  answered: number;
+  correct: number;
+  /** Average answer time of the members who answered. */
+  avgTimeMs: number | null;
+  /** Average points gained this question (= how far the team horse moved). */
+  gained: number;
+  score: number;
+  fastest: { name: string; timeMs: number } | null;
+}
+
 export interface RoundResult {
   questionIndex: number;
   correct: number[];
   counts: number[];
   rows: RoundRow[];
+  /** Filled in by hostState() for teams with members. */
+  teamRows?: TeamRow[];
 }
 
 export type AwardKind = 'fastest' | 'mostCorrect' | 'teamBest';
@@ -134,6 +160,10 @@ export interface HostState {
   endSteps: EndStep[];
   endIndex: number;
   adjustments: Adjustment[];
+  displayMode: DisplayMode;
+  /** The effective view after resolving "auto". */
+  teamView: boolean;
+  maxTeamSize: number;
   joinUrls: string[];
   joinUrl: string;
   /** Set when phones on the LAN probably cannot reach the server (Windows firewall). */
@@ -172,6 +202,7 @@ export type HostAction =
   | { type: 'selectSet'; setId: string }
   | { type: 'reloadQuestions' }
   | { type: 'selectUrl'; url: string }
+  | { type: 'setDisplayMode'; mode: DisplayMode }
   | { type: 'kick'; playerId: string }
   | { type: 'rename'; playerId: string; name: string }
   | { type: 'addPlayer'; name: string }

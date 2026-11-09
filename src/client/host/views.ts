@@ -1,11 +1,11 @@
-import type { AwardEntry, HostAction, HostState, PublicPlayer, PublicTeam, RoundRow } from '../../shared/types';
-import { ANSWER_LETTERS, AWARD_TITLES, MAX_TEAM_SIZE, PLAYER_COLORS } from '../../shared/types';
+import type { AwardEntry, DisplayMode, HostAction, HostState, PublicPlayer, PublicTeam, TeamRow } from '../../shared/types';
+import { ANSWER_LETTERS, AWARD_TITLES, PLAYER_COLORS } from '../../shared/types';
 import { countTo, esc, fmtPoints, fmtTime } from '../common/dom';
 import { horseSvg, playerColor } from '../common/horse';
 import { ANSWER_COLORS, ANSWER_NAMES, shapeSvg } from '../common/shapes';
 import { sfx } from '../common/sound';
 import { bindJoinCard, JOIN_CARD_HTML } from './join';
-import type { RaceTrack } from './race';
+import { lanesFor, type RaceTrack } from './race';
 
 export interface Ctx {
   send(action: HostAction): Promise<boolean>;
@@ -31,6 +31,12 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
           <label>Bộ câu hỏi</label>
           <select class="set-select"></select>
           <button class="btn small ghost reload" title="Đọc lại các file JSON trong thư mục questions/">⟳ Tải lại</button>
+          <span class="mode-pick"><label>Hiển thị</label>
+          <select class="mode-select" title="Đường đua & bảng điểm: mỗi đội một ngựa, hay mỗi người một ngựa">
+            <option value="auto">Tự động</option>
+            <option value="team">🏇 Theo đội</option>
+            <option value="player">🐴 Từng người</option>
+          </select></span>
         </div>
         <div class="set-errors"></div>
         <form class="team-form" autocomplete="off">
@@ -50,6 +56,8 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
     </div>`;
   const updateJoin = bindJoinCard(stage.querySelector<HTMLElement>('.join-card')!, ctx);
   const setSel = stage.querySelector<HTMLSelectElement>('.set-select')!;
+  const modeSel = stage.querySelector<HTMLSelectElement>('.mode-select')!;
+  modeSel.onchange = () => ctx.send({ type: 'setDisplayMode', mode: modeSel.value as DisplayMode });
   const errors = stage.querySelector<HTMLElement>('.set-errors')!;
   const countEl = stage.querySelector<HTMLElement>('.lobby-count b')!;
   const teamCountEl = stage.querySelector<HTMLElement>('.team-count')!;
@@ -115,24 +123,27 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
 
   const renderTeams = (s: HostState) => {
     const byId = new Map(s.players.map((p) => [p.id, p]));
-    const sig = JSON.stringify([s.teams.map((t) => [t.id, t.name, t.color, t.memberIds]), s.players.map((p) => [p.id, p.name, p.connected])]);
+    const max = s.maxTeamSize;
+    const sig = JSON.stringify([max, s.teams.map((t) => [t.id, t.name, t.color, t.memberIds]), s.players.map((p) => [p.id, p.name, p.connected])]);
     if (sig === teamsSig) return;
     teamsSig = sig;
     renderSwatches();
     teamsEl.innerHTML = s.teams
       .map((t) => {
         const members = t.memberIds.map((id) => byId.get(id)!).filter(Boolean);
-        const slots = Array.from({ length: MAX_TEAM_SIZE }, (_, i) => {
+        // Empty slots are only drawn for small teams; big teams just list who is in.
+        const slots = Array.from({ length: max <= 6 ? max : members.length }, (_, i) => {
           const p = members[i];
           return p
             ? `<li class="member ${!p.connected && !p.manual ? 'offline' : ''}" data-id="${p.id}" data-name="${esc(p.name)}" title="${!p.connected && !p.manual ? 'Mất kết nối' : ''}">${horseSvg(t.color)}<span>${esc(p.name)}</span></li>`
             : `<li class="slot">trống</li>`;
         });
-        return `<div class="team-card ${members.length >= MAX_TEAM_SIZE ? 'full' : ''}" data-id="${t.id}" style="--pc:${playerColor(t.color)}">
+        if (!slots.length) slots.push('<li class="slot">chưa có ai</li>');
+        return `<div class="team-card ${members.length >= max ? 'full' : ''} ${max > 6 ? 'big' : ''}" data-id="${t.id}" style="--pc:${playerColor(t.color)}">
           <header>
             <button class="tc-color" title="Đổi màu đội"></button>
             <b class="tc-name" title="Bấm để đổi tên">${esc(t.name)}</b>
-            <span class="tc-count">${members.length}/${MAX_TEAM_SIZE}</span>
+            <span class="tc-count">${members.length}/${max}</span>
             <button class="tc-del" title="Xoá đội">✕</button>
           </header>
           <ul>${slots.join('')}</ul>
@@ -151,6 +162,8 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
   const update = (s: HostState) => {
     current = s;
     updateJoin(s);
+    if (document.activeElement !== modeSel) modeSel.value = s.displayMode;
+    modeSel.options[0].text = `Tự động (${s.teamView ? 'theo đội' : 'từng người'})`;
     setSel.innerHTML = s.questionSets
       .map((q) => `<option value="${esc(q.id)}" ${q.id === s.setId ? 'selected' : ''} ${q.count ? '' : 'disabled'}>${esc(q.title)} (${q.count} câu)</option>`)
       .join('') || '<option>— Chưa có file câu hỏi —</option>';
@@ -353,8 +366,12 @@ export function raceView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
   stage.querySelector('.race-holder')!.appendChild(ctx.track.el);
   const update = (s: HostState) => {
     small.textContent = s.question ? `sau câu ${s.question.index + 1} / ${s.question.total}` : s.setTitle;
-    const startFrom = new Map((s.round?.rows ?? []).map((r) => [r.playerId, r.score - r.gained]));
-    ctx.track.update(s.players, s.teams, true, startFrom);
+    const { lanes, mode } = lanesFor(s);
+    const startFrom =
+      mode === 'team'
+        ? new Map((s.round?.teamRows ?? []).map((r) => [r.teamId, r.score - r.gained]))
+        : new Map((s.round?.rows ?? []).map((r) => [r.playerId, r.score - r.gained]));
+    ctx.track.update(lanes, mode, true, startFrom);
   };
   update(s);
   return { update };
@@ -362,7 +379,7 @@ export function raceView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
 
 // ───────────────────────── Leaderboard ─────────────────────────
 
-function rankDelta(r: RoundRow) {
+function rankDelta(r: { prevRank: number; rank: number }) {
   const d = r.prevRank - r.rank;
   if (!r.prevRank || d === 0) return '<span class="delta same">•</span>';
   return d > 0 ? `<span class="delta up">▲${d}</span>` : `<span class="delta down">▼${-d}</span>`;
@@ -381,8 +398,11 @@ export function boardView(stage: HTMLElement, s: HostState): View {
 
   const update = (s: HostState) => {
     small.textContent = s.question ? `· sau câu ${s.question.index + 1} / ${s.question.total}` : '';
+    stage.querySelector('.board')!.classList.toggle('team-board', s.teamView);
     const round = s.round;
-    if (round) {
+    if (s.teamView) {
+      renderTeamBoard(s, thead, tbody, animated);
+    } else if (round) {
       thead.innerHTML = `<tr><th>Thứ tự</th><th>Người chơi</th><th>Đáp án</th><th>Thời gian</th><th>Điểm lượt này</th><th>Tổng điểm</th></tr>`;
       tbody.innerHTML = round.rows
         .map(
@@ -418,6 +438,57 @@ export function boardView(stage: HTMLElement, s: HostState): View {
   };
   update(s);
   return { update };
+}
+
+/** Team view of the leaderboard: one big row per team, plus the top 10 players on the side. */
+function renderTeamBoard(s: HostState, thead: HTMLElement, tbody: HTMLElement, animated: boolean) {
+  const board = thead.closest('.board')!;
+  let side = board.querySelector<HTMLElement>('.top-players');
+  if (!side) {
+    side = document.createElement('aside');
+    side.className = 'top-players';
+    board.querySelector('.table-wrap')!.after(side);
+  }
+  const rows: TeamRow[] =
+    s.round?.teamRows ??
+    s.teams
+      .filter((t) => t.memberIds.length)
+      .sort((a, b) => b.score - a.score)
+      .map((t, _, all) => ({
+        teamId: t.id, name: t.name, color: t.color, rank: 1 + all.filter((o) => o.score > t.score).length, prevRank: 0,
+        members: t.memberIds.length, answered: 0, correct: 0, avgTimeMs: null, gained: 0, score: t.score, fastest: null,
+      }));
+  const hasRound = !!s.round?.teamRows;
+  thead.innerHTML = hasRound
+    ? `<tr><th>Hạng</th><th>Đội</th><th>Đúng</th><th>TG trung bình</th><th>⚡ Nhanh nhất đội</th><th>+ Điểm</th><th>Điểm đội</th></tr>`
+    : `<tr><th>Hạng</th><th>Đội</th><th>Thành viên</th><th>Điểm đội</th></tr>`;
+  tbody.innerHTML = rows
+    .map(
+      (r, i) => `
+    <tr class="${animated ? '' : 'row-in'} ${r.rank <= 3 ? `top top${r.rank}` : ''}" style="--pc:${playerColor(r.color)};animation-delay:${i * 0.08}s">
+      <td class="c-rank"><span class="rank-badge">${r.rank}</span>${hasRound ? rankDelta(r) : ''}</td>
+      <td class="c-name"><i class="dot"></i>${esc(r.name)}</td>
+      ${
+        hasRound
+          ? `<td class="c-ok">${r.correct}<small>/${r.members}</small></td>
+      <td class="c-time">${fmtTime(r.avgTimeMs)}</td>
+      <td class="c-fast">${r.fastest ? `${esc(r.fastest.name)} <small>${fmtTime(r.fastest.timeMs)}</small>` : '<span class="muted">—</span>'}</td>
+      <td class="c-gain ${r.gained > 0 ? 'pos' : ''}">${r.gained > 0 ? '+' : ''}${fmtPoints(r.gained)}</td>`
+          : `<td class="c-ok">${r.members}</td>`
+      }
+      <td class="c-total">${fmtPoints(r.score)}</td>
+    </tr>`,
+    )
+    .join('');
+  const top = [...s.players].sort((a, b) => b.score - a.score).slice(0, 10);
+  const teamName = new Map(s.teams.map((t) => [t.id, t.name]));
+  side.innerHTML = `<h2>🐴 Top 10 cá nhân</h2><ol>${top
+    .map(
+      (p) => `<li style="--pc:${playerColor(p.color)}"><b>${1 + s.players.filter((o) => o.score > p.score).length}</b><span>${esc(p.name)}${
+        p.teamId ? ` <small>${esc(teamName.get(p.teamId) ?? '')}</small>` : ''
+      }</span><em>${fmtPoints(p.score)}</em></li>`,
+    )
+    .join('')}</ol>`;
 }
 
 // ───────────────────────── Final ─────────────────────────

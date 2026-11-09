@@ -1,10 +1,53 @@
-// Endless horse-race track. Each player has a lane; the camera pans and zooms
-// so that every horse (from the last one to the leader) is always on screen.
-// Team mates race in neighbouring lanes.
-import type { PublicPlayer, PublicTeam } from '../../shared/types';
-import { esc, fmtPoints } from '../common/dom';
+// Endless horse-race track. Each lane is a player (or a whole team in team view);
+// the camera pans and zooms so that every horse (from the last one to the
+// leader) is always on screen. Team mates race in neighbouring lanes.
+import type { HostState, PublicPlayer, PublicTeam } from '../../shared/types';
+import { esc, fmtPoints, fmtTime } from '../common/dom';
 import { horseSvg, playerColor } from '../common/horse';
 import { sfx } from '../common/sound';
+
+/** One horse on the track. */
+export interface Lane {
+  id: string;
+  name: string;
+  color: number;
+  score: number;
+  offline?: boolean;
+  /** Lanes with the same group (team id) are drawn as a block, labelled with groupName. */
+  group?: string | null;
+  groupName?: string;
+  /** Small second line under the name (team view: fastest member, correct count). */
+  sub?: string;
+}
+
+/** Lanes for the "one horse per player" view, team mates next to each other. */
+export function playerLanes(players: PublicPlayer[], teams: PublicTeam[]): Lane[] {
+  const teamIdx = new Map(teams.map((t, i) => [t.id, i]));
+  const group = (p: PublicPlayer) => (p.teamId ? teamIdx.get(p.teamId) ?? teams.length : teams.length);
+  return players
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => group(a.p) - group(b.p) || a.i - b.i)
+    .map(({ p }) => {
+      const team = p.teamId ? teams.find((t) => t.id === p.teamId) : undefined;
+      return { id: p.id, name: p.name, color: p.color, score: p.score, offline: !p.connected && !p.manual, group: team?.id ?? null, groupName: team?.name };
+    });
+}
+
+/** Lanes for the team view: one horse per team that has members. */
+export function teamLanes(s: HostState): Lane[] {
+  const rows = new Map((s.round?.teamRows ?? []).map((r) => [r.teamId, r]));
+  return s.teams
+    .filter((t) => t.memberIds.length)
+    .map((t) => {
+      const r = rows.get(t.id);
+      const parts = [`👥 ${t.memberIds.length}`];
+      if (r) {
+        parts.push(`✔ ${r.correct}/${r.members}`);
+        if (r.fastest) parts.push(`⚡ ${esc(r.fastest.name)} ${fmtTime(r.fastest.timeMs)}`);
+      }
+      return { id: t.id, name: t.name, color: t.color, score: t.score, sub: parts.join(' · ') };
+    });
+}
 
 interface Runner {
   id: string;
@@ -14,6 +57,7 @@ interface Runner {
   rankEl: HTMLElement;
   nameEl: HTMLElement;
   teamEl: HTMLElement;
+  subEl: HTMLElement;
   color: number;
   pos: number;
   from: number;
@@ -22,6 +66,8 @@ interface Runner {
 }
 
 const MIN_SPAN = 1500;
+/** Team scores are averages and grow slower, so the camera may zoom in more. */
+const MIN_SPAN_TEAMS = 600;
 const RACE_MS = 3400;
 
 const easeInOut = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
@@ -46,6 +92,7 @@ export class RaceTrack {
   private trackW = 800;
   private laneH = 60;
   private ranks = new Map<string, number>();
+  private mode: 'player' | 'team' = 'player';
 
   constructor() {
     this.el = document.createElement('div');
@@ -65,8 +112,18 @@ export class RaceTrack {
     this.render();
   }
 
-  /** Sync players. With animate=true horses gallop from where they are to their new score. */
-  update(players: PublicPlayer[], teams: PublicTeam[], animate: boolean, startFrom?: Map<string, number>) {
+  /**
+   * Sync lanes (in display order). With animate=true horses gallop from where they are to their new score.
+   * `mode` switches between player and team lanes; changing it rebuilds the track.
+   */
+  update(lanes: Lane[], mode: 'player' | 'team', animate: boolean, startFrom?: Map<string, number>) {
+    if (mode !== this.mode) {
+      this.mode = mode;
+      for (const r of this.runners.values()) r.row.remove();
+      this.runners.clear();
+      this.el.classList.toggle('teams', mode === 'team');
+    }
+    const players = lanes;
     const seen = new Set<string>();
     for (const p of players) {
       seen.add(p.id);
@@ -81,7 +138,8 @@ export class RaceTrack {
         r.row.style.setProperty('--pc', playerColor(p.color));
       }
       r.nameEl.textContent = p.name;
-      r.row.classList.toggle('offline', !p.connected && !p.manual);
+      if (r.subEl.innerHTML !== (p.sub ?? '')) r.subEl.innerHTML = p.sub ?? '';
+      r.row.classList.toggle('offline', !!p.offline);
       r.from = r.pos;
       r.to = p.score;
       r.delay = animate ? Math.random() * 280 : 0;
@@ -95,7 +153,7 @@ export class RaceTrack {
     }
     const list = [...players];
     this.ranks = new Map(list.map((p) => [p.id, 1 + list.filter((o) => o.score > p.score).length]));
-    this.arrange(players, teams);
+    this.arrange(lanes);
     this.measure();
 
     const moving = animate && [...this.runners.values()].some((r) => r.to !== r.from);
@@ -114,21 +172,14 @@ export class RaceTrack {
     this.raf = requestAnimationFrame((t) => this.frame(t));
   }
 
-  /** Lane order: teams in creation order (members side by side), then players without a team. */
-  private arrange(players: PublicPlayer[], teams: PublicTeam[]) {
-    const teamIdx = new Map(teams.map((t, i) => [t.id, i]));
-    const group = (p: PublicPlayer) => (p.teamId ? teamIdx.get(p.teamId) ?? teams.length : teams.length);
-    const order = players
-      .map((p, i) => ({ p, i }))
-      .sort((a, b) => group(a.p) - group(b.p) || a.i - b.i)
-      .map(({ p }) => p);
+  /** Puts the rows in the given order and marks the start/end of each group block. */
+  private arrange(order: Lane[]) {
     order.forEach((p, i) => {
       const r = this.runners.get(p.id)!;
-      const team = p.teamId ? teams.find((t) => t.id === p.teamId) : undefined;
-      const first = !!team && order[i - 1]?.teamId !== p.teamId;
+      const first = !!p.group && order[i - 1]?.group !== p.group;
       r.row.classList.toggle('team-first', first);
-      r.row.classList.toggle('team-last', !!team && order[i + 1]?.teamId !== p.teamId);
-      r.teamEl.textContent = first ? team!.name : '';
+      r.row.classList.toggle('team-last', !!p.group && order[i + 1]?.group !== p.group);
+      r.teamEl.textContent = first ? p.groupName ?? '' : '';
     });
     const rows = [...this.inner.querySelectorAll<HTMLElement>(':scope > .race-row')];
     if (order.some((p, i) => rows[i] !== this.runners.get(p.id)!.row)) {
@@ -136,12 +187,12 @@ export class RaceTrack {
     }
   }
 
-  private createRunner(p: PublicPlayer, pos: number): Runner {
+  private createRunner(p: Lane, pos: number): Runner {
     const row = document.createElement('div');
     row.className = 'race-row';
     row.style.setProperty('--pc', playerColor(p.color));
     row.innerHTML = `
-      <div class="rl"><span class="rl-team"></span><span class="rl-rank">–</span><span class="rl-name">${esc(p.name)}</span><span class="rl-score">0</span></div>
+      <div class="rl"><span class="rl-team"></span><span class="rl-rank">–</span><span class="rl-text"><span class="rl-name">${esc(p.name)}</span><span class="rl-sub"></span></span><span class="rl-score">0</span></div>
       <div class="lane"><div class="runner">${horseSvg(p.color)}<span class="crown">👑</span></div></div>`;
     this.inner.appendChild(row);
     return {
@@ -152,6 +203,7 @@ export class RaceTrack {
       rankEl: row.querySelector('.rl-rank')!,
       nameEl: row.querySelector('.rl-name')!,
       teamEl: row.querySelector('.rl-team')!,
+      subEl: row.querySelector('.rl-sub')!,
       color: p.color,
       pos,
       from: pos,
@@ -187,9 +239,10 @@ export class RaceTrack {
       lo = Math.min(lo, r.pos, r.to);
       hi = Math.max(hi, r.pos, r.to);
     }
-    if (!Number.isFinite(lo)) return [-200, MIN_SPAN];
+    const minSpan = this.mode === 'team' ? MIN_SPAN_TEAMS : MIN_SPAN;
+    if (!Number.isFinite(lo)) return [-minSpan * 0.13, minSpan];
     const spread = hi - lo;
-    const extra = Math.max(0, MIN_SPAN - spread);
+    const extra = Math.max(0, minSpan - spread);
     return [lo - extra * 0.12 - spread * 0.02, hi + extra * 0.88 + spread * 0.08];
   }
 
@@ -259,4 +312,9 @@ export class RaceTrack {
       }
     }
   }
+}
+
+/** Lanes for the current view (team or player) of a host state. */
+export function lanesFor(s: HostState): { lanes: Lane[]; mode: 'player' | 'team' } {
+  return s.teamView ? { lanes: teamLanes(s), mode: 'team' } : { lanes: playerLanes(s.players, s.teams), mode: 'player' };
 }

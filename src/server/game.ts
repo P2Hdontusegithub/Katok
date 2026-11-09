@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type {
-  Ack, Adjustment, Award, AwardEntry, EndStep, FeedItem, HostState, Phase, PlayerState, PublicPlayer, PublicTeam, RoundResult, RoundRow,
-  TeamOption,
+  Ack, Adjustment, Award, AwardEntry, DisplayMode, EndStep, FeedItem, HostState, Phase, PlayerState, PublicPlayer, PublicTeam, RoundResult,
+  RoundRow, TeamOption, TeamRow,
 } from '../shared/types';
-import { AWARD_TITLES, MAX_TEAM_SIZE, PLAYER_COLORS } from '../shared/types';
+import { AWARD_TITLES, PLAYER_COLORS } from '../shared/types';
 import type { Config } from './config';
 import type { Db } from './db';
 import { prepareQuestions, setInfo, type Question, type QuestionSet } from './questions';
@@ -67,6 +67,7 @@ export class Game {
   private ended = false;
   private endIndex = -1;
   private awardsCache: Award[] | null = null;
+  private displayMode: DisplayMode = 'auto';
   joinUrls: string[] = [];
   joinUrl = '';
   lanWarning: string | null = null;
@@ -115,10 +116,11 @@ export class Game {
     // While some team still has room, picking one is required.
     const options = this.teamOptions();
     let team: TeamOption | undefined;
-    if (options.some((t) => t.count < MAX_TEAM_SIZE)) {
+    const max = this.cfg.maxTeamSize;
+    if (options.some((t) => t.count < max)) {
       team = options.find((o) => o.id === teamId);
       if (!team) return { ok: false, error: 'Chọn đội của bạn nhé!' };
-      if (team.count >= MAX_TEAM_SIZE) return { ok: false, error: `Đội ${team.name} đã đủ ${MAX_TEAM_SIZE} người.` };
+      if (team.count >= max) return { ok: false, error: `Đội ${team.name} đã đủ ${max} người.` };
     }
     const p = this.createPlayer(clean, false);
     p.socketId = socketId;
@@ -285,7 +287,7 @@ export class Game {
       const t = this.teams.find((x) => x.id === teamId);
       if (!t) return { ok: false, error: 'Không tìm thấy đội.' };
       const count = [...this.players.values()].filter((o) => o.teamId === t.id).length;
-      if (count >= MAX_TEAM_SIZE) return { ok: false, error: `Đội ${t.name} đã đủ ${MAX_TEAM_SIZE} người.` };
+      if (count >= this.cfg.maxTeamSize) return { ok: false, error: `Đội ${t.name} đã đủ ${this.cfg.maxTeamSize} người.` };
       p.teamId = t.id;
     }
     this.changed();
@@ -300,6 +302,7 @@ export class Game {
       name: t.name,
       color: t.color,
       count: [...this.players.values()].filter((p) => p.teamId === t.id).length,
+      max: this.cfg.maxTeamSize,
     }));
   }
 
@@ -310,6 +313,51 @@ export class Game {
       const score = members.length ? members.reduce((s, p) => s + p.score, 0) / members.length : 0;
       return { id: t.id, name: t.name, color: t.color, score, memberIds: members.map((p) => p.id) };
     });
+  }
+
+  setDisplayMode(mode: DisplayMode): Ack {
+    if (mode !== 'auto' && mode !== 'player' && mode !== 'team') return { ok: false, error: 'Chế độ hiển thị không hợp lệ.' };
+    this.displayMode = mode;
+    this.changed();
+    return { ok: true };
+  }
+
+  private get teamView(): boolean {
+    const hasTeams = this.teams.some((t) => [...this.players.values()].some((p) => p.teamId === t.id));
+    if (this.displayMode === 'auto') return hasTeams;
+    return this.displayMode === 'team' && hasTeams;
+  }
+
+  /** Per-team summary of the last question, derived from the player rows and the current scores. */
+  private teamRows(rows: RoundRow[]): TeamRow[] {
+    const byPlayer = new Map(rows.map((r) => [r.playerId, r]));
+    const stats = this.teamStats().filter((t) => t.memberIds.length);
+    const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+    const before = new Map(stats.map((t) => [t.id, avg(t.memberIds.map((id) => (this.players.get(id)?.score ?? 0) - (byPlayer.get(id)?.gained ?? 0)))]));
+    const rank = (m: Map<string, number>, id: string) => 1 + [...m.values()].filter((v) => v > m.get(id)!).length;
+    const now = new Map(stats.map((t) => [t.id, t.score]));
+    const meaningfulBefore = new Set(before.values()).size > 1;
+    return stats
+      .map((t) => {
+        const mine = t.memberIds.map((id) => byPlayer.get(id)).filter((r): r is RoundRow => !!r);
+        const answered = mine.filter((r) => r.timeMs !== null);
+        const fastest = mine.filter((r) => r.correct && r.timeMs !== null).sort((a, b) => a.timeMs! - b.timeMs!)[0];
+        return {
+          teamId: t.id,
+          name: t.name,
+          color: t.color,
+          rank: rank(now, t.id),
+          prevRank: meaningfulBefore ? rank(before, t.id) : 0,
+          members: t.memberIds.length,
+          answered: answered.length,
+          correct: mine.filter((r) => r.correct).length,
+          avgTimeMs: answered.length ? Math.round(avg(answered.map((r) => r.timeMs!))) : null,
+          gained: t.score - before.get(t.id)!,
+          score: t.score,
+          fastest: fastest ? { name: fastest.name, timeMs: fastest.timeMs! } : null,
+        };
+      })
+      .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'vi'));
   }
 
   /** Competition ranking of the teams that have members. */
@@ -739,7 +787,7 @@ export class Game {
           return { ...r, name: p.name, color: this.colorOf(p), score: p.score, rank: ranks.get(p.id) ?? r.rank };
         })
         .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'vi'));
-      round = { ...round, rows };
+      round = { ...round, rows, teamRows: this.teamRows(rows) };
     }
 
     return {
@@ -770,6 +818,9 @@ export class Game {
       endSteps: this.ended ? this.endSteps() : [],
       endIndex: this.ended && this.isEndPhase() ? this.endIndex : -1,
       adjustments: this.adjustments.slice(0, 50),
+      displayMode: this.displayMode,
+      teamView: this.teamView,
+      maxTeamSize: this.cfg.maxTeamSize,
       joinUrls: this.joinUrls,
       joinUrl: this.joinUrl,
       lanWarning: this.lanWarning,
@@ -892,6 +943,7 @@ export class Game {
           adjustments: this.adjustments,
           ended: this.ended,
           endIndex: this.endIndex,
+          displayMode: this.displayMode,
         }),
       );
     } catch (err) {
@@ -907,6 +959,7 @@ export class Game {
       if (s.v !== 1) return false;
       // Teams are host setup: keep them even when there is no game worth restoring.
       this.teams = s.teams ?? [];
+      if (s.displayMode) this.displayMode = s.displayMode;
       if (!s.players?.length && !s.started) return false;
       this.gameId = s.gameId;
       this.started = s.started;

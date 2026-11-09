@@ -5,6 +5,7 @@
   "latencyCompensationMs": 800,
   "autoEndWhenAllAnswered": true,
   "maxPlayers": 180,
+  "maxTeamSize": 20,
   "scoring": {
     "maxPoints": 1000,
     "minPoints": 500,

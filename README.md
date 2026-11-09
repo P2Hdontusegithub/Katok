@@ -190,6 +190,7 @@ Nếu máy host có VPN, máy ảo, Radmin, Hamachi…, Ka-tok có thể hiện 
   "latencyCompensationMs": 800,
   "autoEndWhenAllAnswered": true,
   "maxPlayers": 150,
+  "maxTeamSize": 20,
   "scoring": {
     "maxPoints": 1000,
     "minPoints": 500,
@@ -208,6 +209,7 @@ Nếu máy host có VPN, máy ảo, Radmin, Hamachi…, Ka-tok có thể hiện 
 | `latencyCompensationMs` | Mức trễ mạng tối đa (ms) được bù khi tính thời gian trả lời. Ka-tok dùng đồng hồ của điện thoại nhưng chỉ tin trong phạm vi này để chống gian lận. |
 | `autoEndWhenAllAnswered` | `true` thì câu hỏi tự kết thúc khi mọi người đang online đã trả lời xong. |
 | `maxPlayers` | Số người chơi tối đa. |
+| `maxTeamSize` | Số người tối đa mỗi đội (mặc định 3). Sự kiện đông người chia ít đội thì tăng lên, ví dụ 150 người / 8 đội → `20`. |
 | `scoring` | Quy tắc tính điểm, xem [mục 8](#8-cách-tính-điểm). |
 
 Bạn cũng có thể ghi đè bằng biến môi trường: `PORT`, `HOST_PASSWORD`, `PUBLIC_URL`. Sau khi sửa `config.json`, cần **tắt và chạy lại** server.
@@ -294,7 +296,13 @@ Mỗi câu hỏi đi qua các màn hình theo thứ tự sau. Bấm nút lớn �
 
 Trên đầu các màn kết thúc có **thanh điều hướng** (⚡ Nhanh nhất · ✔ Đúng nhiều · 🌟 Xuất sắc đội · 🏅 Cá nhân · 🏆 Đồng đội) để quay lại hoặc nhảy tới màn bất kỳ. Câu khởi động (×0 điểm) không được tính vào các giải.
 
-**Chơi theo đội (tùy chọn):** ở sảnh chờ, host nhập tên đội ngắn (tối đa 12 ký tự), chọn màu rồi bấm **＋ Tạo đội**. Mỗi đội tối đa **3 người**; mọi con ngựa trong đội mang màu của đội. Khi đã có đội còn chỗ, người chơi phải chọn đội lúc vào phòng (và có thể đổi đội cho tới khi bắt đầu). Trên thẻ đội, bấm vào tên để đổi tên, chấm tròn để đổi màu, ✕ để xóa đội. Host cũng có thể chuyển đội cho người chơi trong màn hình chấm tay ✍️ khi đang ở sảnh. **Điểm đội = tổng điểm các thành viên ÷ số thành viên.** Trên đường đua, các thành viên cùng đội chạy ở các làn sát nhau. Không tạo đội thì trò chơi chạy như cũ.
+**Chơi theo đội (tùy chọn):** ở sảnh chờ, host nhập tên đội ngắn (tối đa 12 ký tự), chọn màu rồi bấm **＋ Tạo đội**. Mỗi đội tối đa `maxTeamSize` người (trong `config.json`, mặc định 3); mọi con ngựa trong đội mang màu của đội. Khi đã có đội còn chỗ, người chơi phải chọn đội lúc vào phòng (và có thể đổi đội cho tới khi bắt đầu). Trên thẻ đội, bấm vào tên để đổi tên, chấm tròn để đổi màu, ✕ để xóa đội. Host cũng có thể chuyển đội cho người chơi trong màn hình chấm tay ✍️ khi đang ở sảnh. **Điểm đội = tổng điểm các thành viên ÷ số thành viên.** Không tạo đội thì trò chơi chạy như cũ.
+
+**Hiển thị theo đội (cho sự kiện đông người):** ô **Hiển thị** ở sảnh chọn cách vẽ đường đua và bảng điểm:
+- *Theo đội* — mỗi đội **một con ngựa** (làn to, đọc rõ trên máy chiếu), dưới tên đội có sĩ số, số người trả lời đúng câu vừa rồi và người đúng nhanh nhất của đội. Bảng điểm hiện mỗi đội một dòng: *Hạng, Đội, Đúng (x/sĩ số), Thời gian trung bình, Nhanh nhất đội, + Điểm, Điểm đội*, kèm cột **Top 10 cá nhân** bên cạnh.
+- *Từng người* — mỗi người một con ngựa như trước, thành viên cùng đội chạy ở các làn sát nhau.
+- *Tự động* (mặc định) — theo đội khi có đội có thành viên, còn lại là từng người.
+Điểm mỗi người vẫn được tính riêng như cũ (dùng cho bục cá nhân và các giải).
 
 **Thanh công cụ phía trên:**
 
