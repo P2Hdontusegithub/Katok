@@ -159,6 +159,7 @@ io.on('connection', (socket) => {
         case 'start': r = game.start(); break;
         case 'next': r = game.next(); break;
         case 'goto': r = game.goto(action.phase); break;
+        case 'gotoEnd': r = game.gotoEnd(Number(action.index)); break;
         case 'end': r = game.end(); break;
         case 'newGame': game.reset(true); break;
         case 'toLobby': game.reset(false); break;

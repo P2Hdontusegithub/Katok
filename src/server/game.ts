@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type {
-  Ack, Adjustment, FeedItem, HostState, Phase, PlayerState, PublicPlayer, PublicTeam, RoundResult, RoundRow, TeamOption,
+  Ack, Adjustment, Award, AwardEntry, EndStep, FeedItem, HostState, Phase, PlayerState, PublicPlayer, PublicTeam, RoundResult, RoundRow,
+  TeamOption,
 } from '../shared/types';
-import { MAX_TEAM_SIZE, PLAYER_COLORS } from '../shared/types';
+import { AWARD_TITLES, MAX_TEAM_SIZE, PLAYER_COLORS } from '../shared/types';
 import type { Config } from './config';
 import type { Db } from './db';
 import { prepareQuestions, setInfo, type Question, type QuestionSet } from './questions';
@@ -62,6 +63,10 @@ export class Game {
   private adjustments: Adjustment[] = [];
   private gameId = newId();
   private restored = false;
+  /** True once finish() ran: "next" then walks through the end screens instead of asking questions. */
+  private ended = false;
+  private endIndex = -1;
+  private awardsCache: Award[] | null = null;
   joinUrls: string[] = [];
   joinUrl = '';
   lanWarning: string | null = null;
@@ -470,6 +475,7 @@ export class Game {
         this.phase = 'leaderboard';
         break;
       case 'leaderboard':
+        if (this.ended) return this.showEnd(Math.max(0, this.endIndex));
         if (!this.started) return this.start();
         if (this.qIndex + 1 < this.questions.length) {
           this.getReady(this.qIndex + 1);
@@ -477,11 +483,11 @@ export class Game {
         }
         this.finish();
         return { ok: true };
+      case 'awards':
       case 'teamfinal':
-        this.phase = 'final';
-        break;
       case 'final':
-        return { ok: false, error: 'Trò chơi đã kết thúc.' };
+        if (this.endIndex + 1 >= this.endSteps().length) return { ok: false, error: 'Trò chơi đã kết thúc.' };
+        return this.showEnd(this.endIndex + 1);
     }
     this.changed();
     return { ok: true };
@@ -494,6 +500,79 @@ export class Game {
     return { ok: true };
   }
 
+  /** Jump to one of the screens after the game (awards, podiums). */
+  gotoEnd(index: number): Ack {
+    if (!this.ended) return { ok: false, error: 'Trò chơi chưa kết thúc.' };
+    return this.showEnd(index);
+  }
+
+  private showEnd(index: number): Ack {
+    const step = this.endSteps()[index];
+    if (!Number.isInteger(index) || !step) return { ok: false, error: 'Không có màn hình này.' };
+    this.endIndex = index;
+    this.phase = step.phase;
+    this.changed();
+    return { ok: true };
+  }
+
+  /** Order of the end screens: smaller awards first, the podiums as the climax. */
+  private endSteps(): EndStep[] {
+    const steps: EndStep[] = this.awards().map((_, i) => ({ phase: 'awards' as const, award: i }));
+    steps.push({ phase: 'final' });
+    if (this.teamRanks().size) steps.push({ phase: 'teamfinal' });
+    return steps;
+  }
+
+  /** Special awards computed from the answer log (warm-up questions with ×0 are ignored). */
+  private awards(): Award[] {
+    if (this.awardsCache) return this.awardsCache;
+    if (!this.ended) return [];
+    const counted = new Set(this.questions.flatMap((q, i) => (q.points > 0 ? [i] : [])));
+    const rows = this.db.answersFor(this.gameId).filter((a) => counted.has(a.question_index) && this.players.has(a.player_id));
+    const questionCount = new Set(rows.map((a) => a.question_index)).size;
+    const entry = (p: Player): AwardEntry => {
+      const t = this.teamOf(p);
+      return { playerId: p.id, name: p.name, color: this.colorOf(p), teamName: t?.name ?? null, teamColor: t?.color ?? null };
+    };
+    const correctRows = rows.filter((a) => a.correct && a.time_ms !== null);
+    const stats = new Map<string, { correct: number; time: number }>();
+    for (const a of correctRows) {
+      const st = stats.get(a.player_id) ?? { correct: 0, time: 0 };
+      st.correct++;
+      st.time += a.time_ms!;
+      stats.set(a.player_id, st);
+    }
+
+    const fastest = [...correctRows]
+      .sort((a, b) => a.time_ms! - b.time_ms!)
+      .slice(0, 5)
+      .map((a) => ({ ...entry(this.players.get(a.player_id)!), timeMs: a.time_ms!, questionIndex: a.question_index }));
+    const mostCorrect = [...stats.entries()]
+      .sort((a, b) => b[1].correct - a[1].correct || a[1].time - b[1].time)
+      .slice(0, 5)
+      .map(([id, st]) => ({ ...entry(this.players.get(id)!), correct: st.correct, timeMs: Math.round(st.time / st.correct) }));
+    const teamRanks = this.teamRanks();
+    const teamBest = this.teamStats()
+      .filter((t) => t.memberIds.length)
+      .sort((a, b) => (teamRanks.get(a.id) ?? 0) - (teamRanks.get(b.id) ?? 0))
+      .map((t) => {
+        const best = t.memberIds
+          .map((id) => this.players.get(id)!)
+          .sort((a, b) => b.score - a.score || (stats.get(b.id)?.correct ?? 0) - (stats.get(a.id)?.correct ?? 0))[0];
+        return { ...entry(best), score: best.score, correct: stats.get(best.id)?.correct ?? 0 };
+      })
+      // A team whose best member has no points has nobody to celebrate.
+      .filter((e) => e.score > 0);
+
+    const all: Award[] = [
+      { kind: 'fastest', entries: fastest, questionCount },
+      { kind: 'mostCorrect', entries: mostCorrect, questionCount },
+      { kind: 'teamBest', entries: teamBest, questionCount },
+    ];
+    this.awardsCache = all.filter((a) => a.entries.length);
+    return this.awardsCache;
+  }
+
   end(): Ack {
     if (this.phase === 'lobby' && !this.started) return { ok: false, error: 'Trò chơi chưa bắt đầu.' };
     if (this.phase === 'question') this.endQuestion();
@@ -503,8 +582,10 @@ export class Game {
 
   private finish() {
     this.clearTimer();
-    // The team podium comes first, then the individual one.
-    this.phase = this.teamRanks().size ? 'teamfinal' : 'final';
+    this.ended = true;
+    this.awardsCache = null;
+    this.endIndex = 0;
+    this.phase = this.endSteps()[0].phase;
     const ranks = this.ranks();
     if (this.started || this.adjustments.length) {
       this.db.startGame(this.gameId, this.setId ?? '', this.currentSet?.title ?? '');
@@ -534,6 +615,8 @@ export class Game {
     this.adjustments = [];
     this.gameId = newId();
     this.restored = false;
+    this.ended = false;
+    this.endIndex = -1;
     this.changed();
   }
 
@@ -683,12 +766,31 @@ export class Game {
       answeredCount: this.answers.size,
       feed: this.phase === 'question' || this.phase === 'reveal' ? feed : [],
       round,
+      awards: this.awards(),
+      endSteps: this.ended ? this.endSteps() : [],
+      endIndex: this.ended && this.isEndPhase() ? this.endIndex : -1,
       adjustments: this.adjustments.slice(0, 50),
       joinUrls: this.joinUrls,
       joinUrl: this.joinUrl,
       lanWarning: this.lanWarning,
       restored: this.restored,
     };
+  }
+
+  private isEndPhase() {
+    return this.phase === 'awards' || this.phase === 'final' || this.phase === 'teamfinal';
+  }
+
+  /** The line shown on a phone whose owner is on the award screen currently showing. */
+  private honorOf(playerId: string): string | null {
+    if (this.phase !== 'awards') return null;
+    const step = this.endSteps()[this.endIndex];
+    const award = step?.phase === 'awards' ? this.awards()[step.award] : undefined;
+    const i = award?.entries.findIndex((e) => e.playerId === playerId) ?? -1;
+    if (!award || i < 0) return null;
+    const t = AWARD_TITLES[award.kind];
+    if (award.kind === 'teamBest') return `${t.icon} Xuất sắc nhất đội ${award.entries[i].teamName ?? ''}`;
+    return `${t.icon} ${t.title} · hạng ${i + 1}`;
   }
 
   playerState(playerId: string): PlayerState | null {
@@ -728,6 +830,7 @@ export class Game {
             timeMs: row.timeMs,
           }
         : null,
+      honor: this.honorOf(p.id),
     };
   }
 
@@ -740,7 +843,7 @@ export class Game {
     const hasTeams = this.teams.length > 0;
     const header = [
       'Hạng', 'Người chơi', ...(hasTeams ? ['Đội'] : []),
-      ...Array.from({ length: qCount }, (_, i) => `Câu ${i + 1}`), 'Chấm tay', 'Tổng điểm',
+      ...Array.from({ length: qCount }, (_, i) => `Câu ${i + 1}`), 'Chấm tay', 'Tổng điểm', 'Số câu đúng',
     ];
     const rows: (string | number)[][] = [...this.players.values()]
       .sort((a, b) => b.score - a.score)
@@ -749,7 +852,8 @@ export class Game {
           answers.filter((a) => a.player_id === p.id && a.question_index === i).reduce((s, a) => s + a.points, 0),
         );
         const manual = adj.filter((a) => a.player_id === p.id).reduce((s, a) => s + a.delta, 0);
-        return [ranks.get(p.id) ?? 0, p.name, ...(hasTeams ? [this.teamOf(p)?.name ?? ''] : []), ...per, manual, p.score];
+        const correct = answers.filter((a) => a.player_id === p.id && a.correct).length;
+        return [ranks.get(p.id) ?? 0, p.name, ...(hasTeams ? [this.teamOf(p)?.name ?? ''] : []), ...per, manual, p.score, correct];
       });
     if (hasTeams) {
       const teamRanks = this.teamRanks();
@@ -765,6 +869,8 @@ export class Game {
   // ───────────────────────── persistence ─────────────────────────
 
   private changed() {
+    // Names, colours or scores may have changed; awards are recomputed on demand.
+    this.awardsCache = null;
     this.persist();
     this.events.all();
   }
@@ -784,6 +890,8 @@ export class Game {
           teams: this.teams,
           round: this.round,
           adjustments: this.adjustments,
+          ended: this.ended,
+          endIndex: this.endIndex,
         }),
       );
     } catch (err) {
@@ -809,6 +917,12 @@ export class Game {
       this.round = s.round ?? null;
       this.adjustments = s.adjustments ?? [];
       this.phase = s.phase;
+      // Snapshots from v1.x have no "ended" flag: the podium phases imply it.
+      this.ended = s.ended ?? (this.phase === 'teamfinal' || this.phase === 'final');
+      this.endIndex = s.endIndex ?? -1;
+      if (this.ended && this.endIndex < 0) {
+        this.endIndex = Math.max(0, this.endSteps().findIndex((st) => st.phase === this.phase));
+      }
       if (this.phase === 'getready' || this.phase === 'question') {
         // The interrupted question will be asked again.
         this.qIndex -= 1;
