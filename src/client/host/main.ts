@@ -1,4 +1,5 @@
-import type { HostAction, HostState } from '../../shared/types';
+import type { EndStep, HostAction, HostState } from '../../shared/types';
+import { AWARD_TITLES } from '../../shared/types';
 import { $, decorateBackground, toast } from '../common/dom';
 import { call, connect, connectionBanner } from '../common/net';
 import { isMuted, setMuted, sfx, startMusic, stopMusic, unlockAudio } from '../common/sound';
@@ -6,7 +7,7 @@ import { confetti } from './confetti';
 import { JoinPanel } from './join';
 import { ManualPanel } from './manual';
 import { RaceTrack } from './race';
-import { boardView, finalView, getReadyView, lobbyView, questionView, raceView, teamFinalView, type Ctx, type View } from './views';
+import { awardsView, boardView, finalView, getReadyView, lobbyView, questionView, raceView, teamFinalView, type Ctx, type View } from './views';
 
 decorateBackground();
 const socket = connect();
@@ -17,6 +18,7 @@ const login = $('#login');
 const app = $('#app');
 const stage = $('#stage');
 const nextBtn = $<HTMLButtonElement>('#next');
+const endNav = $('#endnav');
 
 const ctx: Ctx = {
   track: new RaceTrack(),
@@ -73,6 +75,7 @@ document.addEventListener('pointerdown', () => unlockAudio(), { once: true });
 
 function keyFor(s: HostState) {
   const qi = s.question?.index ?? -1;
+  if (s.endIndex >= 0) return `end-${s.endIndex}-${s.endSteps.length}`;
   return s.phase === 'question' || s.phase === 'reveal' ? `q-${qi}` : `${s.phase}-${qi}`;
 }
 
@@ -93,12 +96,17 @@ function onPhaseChange(prev: HostState | null, s: HostState) {
     case 'leaderboard':
       sfx.pop();
       break;
-    case 'teamfinal':
-    case 'final':
-      sfx.fanfare();
-      confetti();
-      break;
   }
+}
+
+/** Sound for each end screen (the phase alone does not change between two award screens). */
+function onEndStep(s: HostState) {
+  const step = s.endSteps[s.endIndex];
+  if (!step) return;
+  sfx.fanfare();
+  if (step.phase !== 'awards') confetti();
+  // Confetti when the winner of an award is revealed (they appear last).
+  else setTimeout(() => state?.endIndex === s.endIndex && confetti(), 600 + ((s.awards[step.award]?.entries.length ?? 1) - 1) * 700);
 }
 
 function render(s: HostState) {
@@ -111,6 +119,7 @@ function render(s: HostState) {
   if (s.phase === 'lobby' || s.phase === 'getready' || s.phase === 'question') ctx.track.update(s.players, s.teams, false);
 
   const key = keyFor(s);
+  if (key !== viewKey && s.endIndex >= 0 && (prev?.endIndex ?? -1) !== s.endIndex) onEndStep(s);
   if (key !== viewKey) {
     view?.destroy?.();
     viewKey = key;
@@ -122,7 +131,8 @@ function render(s: HostState) {
       case 'reveal': view = questionView(stage, s); break;
       case 'race': view = raceView(stage, s, ctx); break;
       case 'leaderboard': view = boardView(stage, s); break;
-      case 'teamfinal': view = teamFinalView(stage, s); break;
+      case 'awards': view = awardsView(stage, s); break;
+      case 'teamfinal': view = teamFinalView(stage, s, ctx); break;
       case 'final': view = finalView(stage, s, ctx); break;
     }
   } else {
@@ -140,23 +150,50 @@ const NEXT_LABEL: Record<HostState['phase'], string> = {
   reveal: 'Đường đua 🏇',
   race: 'Bảng điểm 📋',
   leaderboard: 'Câu tiếp ▶',
-  teamfinal: 'Bục cá nhân 🏅',
+  awards: '',
+  teamfinal: '',
   final: '',
 };
+
+function stepLabel(s: HostState, step: EndStep, short = false) {
+  if (step.phase === 'final') return short ? '🏅 Cá nhân' : 'Bục cá nhân 🏅';
+  if (step.phase === 'teamfinal') return short ? '🏆 Đồng đội' : 'Bục đồng đội 🏆';
+  const kind = s.awards[step.award]?.kind;
+  if (!kind) return '';
+  const t = AWARD_TITLES[kind];
+  return short ? `${t.icon} ${t.short}` : `${t.short} ${t.icon}`;
+}
+
+function renderEndNav(s: HostState) {
+  endNav.hidden = s.endIndex < 0;
+  if (endNav.hidden) return;
+  const sig = JSON.stringify([s.endSteps, s.endIndex, s.awards.map((a) => a.kind)]);
+  if (endNav.dataset.sig === sig) return;
+  endNav.dataset.sig = sig;
+  endNav.innerHTML = s.endSteps
+    .map((st, i) => `<button class="${i === s.endIndex ? 'on' : ''}" data-i="${i}">${stepLabel(s, st, true)}</button>`)
+    .join('');
+}
 
 function renderBar(s: HostState) {
   const last = s.question && s.question.index + 1 >= s.question.total;
   let label = NEXT_LABEL[s.phase];
   if (s.phase === 'leaderboard' && s.question === null && s.round === null) label = 'Tiếp tục ▶';
-  if (s.phase === 'leaderboard' && last) label = 'Kết quả chung cuộc 🏆';
+  if (s.phase === 'leaderboard' && last) label = 'Trao giải 🏆';
+  if (s.endSteps.length && s.phase === 'leaderboard') label = 'Về trao giải 🏆';
+  if (s.endIndex >= 0) {
+    const nextStep = s.endSteps[s.endIndex + 1];
+    label = nextStep ? stepLabel(s, nextStep) : '';
+  }
+  renderEndNav(s);
   nextBtn.textContent = label;
   nextBtn.hidden = !label;
   $('#bar-set').textContent = s.setTitle || 'Ka-tok';
   $('#bar-q').textContent = s.question ? `Câu ${s.question.index + 1}/${s.question.total}` : '';
   $('#bar-players').textContent = `👥 ${s.players.filter((p) => p.connected || p.manual).length}/${s.players.length}`;
   $<HTMLButtonElement>('#btn-join').hidden = s.phase === 'lobby';
-  $<HTMLButtonElement>('#btn-race').hidden = !['reveal', 'leaderboard', 'teamfinal', 'final'].includes(s.phase);
-  $<HTMLButtonElement>('#btn-board').hidden = !['race', 'teamfinal', 'final'].includes(s.phase);
+  $<HTMLButtonElement>('#btn-race').hidden = !['reveal', 'leaderboard', 'awards', 'teamfinal', 'final'].includes(s.phase);
+  $<HTMLButtonElement>('#btn-board').hidden = !['race', 'awards', 'teamfinal', 'final'].includes(s.phase);
 }
 
 socket.on('host:state', (s: HostState) => render(s));
@@ -173,6 +210,10 @@ async function next() {
 }
 
 nextBtn.onclick = next;
+endNav.onclick = (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-i]');
+  if (b && !b.classList.contains('on')) ctx.send({ type: 'gotoEnd', index: Number(b.dataset.i) });
+};
 $('#btn-manual').onclick = () => manual.toggle();
 $('#btn-join').onclick = () => join.toggle();
 $('#btn-race').onclick = () => ctx.send({ type: 'goto', phase: 'race' });

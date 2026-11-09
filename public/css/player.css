@@ -97,3 +97,4 @@ body.player { touch-action: manipulation; user-select: none; -webkit-user-select
 .final-card h2 { font-size: 2.6rem; }
 .final-score { font-size: 3rem; font-weight: 800; color: var(--yellow); }
 .final-score small { font-size: 1.2rem; color: #fff; }
+.honor { font-size: 1.4rem !important; font-weight: 800; background: rgba(255, 255, 255, 0.2); padding: 8px 14px; border-radius: 14px; }

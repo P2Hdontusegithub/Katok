@@ -356,3 +356,39 @@ body.host { overflow: hidden; }
   .answers { grid-template-columns: 1fr; }
   .bar-pill { display: none; }
 }
+
+/* ───── End screens: navigation + special awards ───── */
+.endnav { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px 0; position: relative; z-index: 5; }
+.endnav button {
+  font: inherit; font-weight: 800; font-size: 1rem; border: 0; cursor: pointer; padding: 6px 16px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16); color: #fff; transition: background 0.2s;
+}
+.endnav button:hover { background: rgba(255, 255, 255, 0.28); }
+.endnav button.on { background: #fff; color: var(--bg-2); }
+.aw-sub { font-weight: 700; font-size: clamp(1rem, 1.6vw, 1.4rem); opacity: 0.85; margin: -4px 0 8px; }
+.aw-list { list-style: none; margin: 0; padding: 0; width: min(1100px, 100%); display: flex; flex-direction: column; gap: 10px; }
+.aw-row {
+  display: grid; grid-template-columns: 4rem clamp(60px, 6vw, 96px) 1fr auto auto; align-items: center; gap: 16px;
+  background: rgba(255, 255, 255, 0.14); border-left: 10px solid var(--pc); border-radius: 18px; padding: 8px 22px;
+  font-weight: 800; font-size: clamp(1.2rem, 2.2vw, 2rem); animation: slideUp 0.6s both;
+}
+.aw-row.first { background: #fff; color: var(--ink); font-size: clamp(1.5rem, 3vw, 2.8rem); box-shadow: var(--shadow); }
+.aw-rank { text-align: center; font-size: 1.3em; }
+.aw-horse { display: block; width: 100%; }
+.aw-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.aw-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-team { flex: none; font-size: 0.55em; padding: 2px 12px; border-radius: 999px; background: var(--tc); color: #fff; }
+.aw-detail { font-size: 0.6em; opacity: 0.8; white-space: nowrap; }
+.aw-value { color: var(--yellow); white-space: nowrap; text-align: right; min-width: 5ch; }
+.aw-row.first .aw-value { color: var(--bg-2); }
+.aw-value small { font-size: 0.55em; opacity: 0.8; }
+.aw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; width: min(1300px, 100%); }
+.aw-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; background: rgba(255, 255, 255, 0.14);
+  border-top: 10px solid var(--pc); border-radius: 20px; padding: 12px; font-weight: 800; animation: popIn 0.6s both;
+}
+.aw-card-team { font-size: 1.1rem; opacity: 0.85; }
+.aw-card .aw-horse { width: clamp(70px, 7vw, 110px); }
+.aw-card .aw-name { font-size: clamp(1.3rem, 2vw, 1.9rem); max-width: 100%; }
+.aw-card .aw-value { font-size: 1.4rem; text-align: center; }
+.aw-card .aw-detail { font-size: 1rem; }

@@ -288,8 +288,11 @@ Mỗi câu hỏi đi qua các màn hình theo thứ tự sau. Bấm nút lớn �
 | **Đáp án** | Đáp án đúng, biểu đồ số người chọn từng đáp án, top 3 nhanh nhất | Đường đua 🏇 |
 | **Đường đua** | Ngựa phi lên theo số điểm vừa được cộng, camera tự co giãn | Bảng điểm 📋 |
 | **Bảng kết quả** | Cột *Thứ tự, Người chơi, Đáp án, Thời gian, Điểm lượt này, Tổng điểm*, kèm mũi tên tăng/giảm hạng và ⚡ cho người nhanh nhất | Câu tiếp ▶ |
-| **Chung cuộc – Đồng đội** *(chỉ khi có đội)* | Bục top 3 đội, cả đội cùng đứng trên một bục | Bục cá nhân 🏅 |
-| **Chung cuộc** | Bục vinh quang top 3, pháo giấy và nhạc, danh sách các hạng sau | Xuất CSV / Ván mới / Về sảnh |
+| **Trao giải** *(sau câu cuối)* | Mỗi màn một giải, hiện dần từ hạng thấp lên hạng 1: ⚡ *Trả lời đúng nhanh nhất* (5 lượt bấm đúng nhanh nhất cả trận), ✔ *Trả lời đúng nhiều nhất*, 🌟 *Xuất sắc nhất mỗi đội* (chỉ khi có đội). Điện thoại người được xướng tên hiện "Bạn được vinh danh!" | Giải tiếp theo ▶ |
+| **Chung cuộc** | Bục vinh quang top 3 cá nhân, pháo giấy và nhạc, danh sách các hạng sau | Bục đồng đội 🏆 |
+| **Chung cuộc – Đồng đội** *(chỉ khi có đội)* | Bục top 3 đội, cả đội cùng đứng trên một bục | Xuất CSV / Ván mới / Về sảnh |
+
+Trên đầu các màn kết thúc có **thanh điều hướng** (⚡ Nhanh nhất · ✔ Đúng nhiều · 🌟 Xuất sắc đội · 🏅 Cá nhân · 🏆 Đồng đội) để quay lại hoặc nhảy tới màn bất kỳ. Câu khởi động (×0 điểm) không được tính vào các giải.
 
 **Chơi theo đội (tùy chọn):** ở sảnh chờ, host nhập tên đội ngắn (tối đa 12 ký tự), chọn màu rồi bấm **＋ Tạo đội**. Mỗi đội tối đa **3 người**; mọi con ngựa trong đội mang màu của đội. Khi đã có đội còn chỗ, người chơi phải chọn đội lúc vào phòng (và có thể đổi đội cho tới khi bắt đầu). Trên thẻ đội, bấm vào tên để đổi tên, chấm tròn để đổi màu, ✕ để xóa đội. Host cũng có thể chuyển đội cho người chơi trong màn hình chấm tay ✍️ khi đang ở sảnh. **Điểm đội = tổng điểm các thành viên ÷ số thành viên.** Trên đường đua, các thành viên cùng đội chạy ở các làn sát nhau. Không tạo đội thì trò chơi chạy như cũ.
 

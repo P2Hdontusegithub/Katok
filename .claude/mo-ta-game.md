@@ -121,9 +121,12 @@ Katok/
 
 ```
 lobby → getready → question → reveal → race → leaderboard ─┬→ getready (câu tiếp)
-                                                            └→ teamfinal (nếu có đội có thành viên) → final
-                                                            └→ final (không có đội)
+                                                            └→ finish() → các màn kết thúc (endSteps):
+   awards[⚡ nhanh nhất] → awards[✔ đúng nhiều nhất] → awards[🌟 xuất sắc mỗi đội] → final (bục cá nhân) → teamfinal (bục đội)
 ```
+- `endSteps()` (`game.ts`) chỉ gồm các giải có người nhận (giải rỗng bị bỏ) + `final` + `teamfinal` (chỉ khi có đội có thành viên). `endIndex` = màn đang chiếu.
+- Cờ `ended` bật trong `finish()`: từ đó `next` đi qua các màn kết thúc; ở `leaderboard` (vào bằng 📋) thì `next` quay lại màn kết thúc đang dở ("Về trao giải 🏆") thay vì hỏi câu tiếp.
+- Action `gotoEnd {index}` (thanh điều hướng `#endnav` trên đầu các màn kết thúc) nhảy tới màn bất kỳ.
 
 | Phase | Vào bằng | Kết thúc bằng | Ghi chú |
 |---|---|---|---|
@@ -133,8 +136,9 @@ lobby → getready → question → reveal → race → leaderboard ─┬→ ge
 | `reveal` | `endQuestion()` | host `next` | Tính điểm, ghi DB, hiện đáp án đúng + biểu đồ + top 3 nhanh nhất |
 | `race` | host `next` hoặc `goto('race')` | host `next` | Ngựa chạy theo điểm vừa cộng |
 | `leaderboard` | host `next` hoặc `goto('leaderboard')` | host `next` | Bảng chi tiết; `next` sang câu tiếp hoặc `finish()` nếu là câu cuối |
-| `teamfinal` | `finish()` khi có ≥1 đội có thành viên | host `next` | Bục top 3 đội |
-| `final` | `finish()` hoặc `next` từ `teamfinal` | `newGame` / `toLobby` | Bục top 3 cá nhân, danh sách hạng 4–15, nút xuất CSV |
+| `awards` | `finish()` / `next` / `gotoEnd` | host `next` | Một giải đặc biệt mỗi màn (xem §9b) |
+| `final` | `next` / `gotoEnd` | host `next` (nếu còn bục đội) | Bục top 3 cá nhân, danh sách hạng 4–15 |
+| `teamfinal` | `next` / `gotoEnd`, chỉ khi có ≥1 đội có thành viên | `newGame` / `toLobby` | Bục top 3 đội; là màn cuối nên có nút Xuất CSV / Ván mới / Về sảnh |
 
 - Hẹn giờ ở server bằng `setTimeout` + `performance.now()` (`startTimed`). `remainingMs` được gửi kèm mỗi state để client tự đếm ngược.
 - `goto(race|leaderboard)` cho phép chuyển qua lại giữa đường đua và bảng điểm bất cứ lúc nào **trừ** khi đang `getready`/`question`.
@@ -166,6 +170,14 @@ Sai:           wrongPoints × points
 - `prevRank` chỉ được tính khi trước câu đó điểm không đồng đều (tránh mũi tên vô nghĩa ở câu 1).
 - `RoundRow.fastest` = người đúng nhanh nhất (hiện ⚡).
 - **Điểm đội** = trung bình cộng điểm thành viên (`teamStats`), hạng đội chỉ tính các đội có thành viên.
+
+## 9b. Giải đặc biệt (`Game.awards()`)
+
+Tính lại theo yêu cầu (cache `awardsCache`, xoá mỗi lần `changed()`) từ bảng `answers` của ván (`db.answersFor`), chỉ tính câu có hệ số `points > 0` và người chơi còn trong phòng:
+- **⚡ Trả lời đúng nhanh nhất** (`fastest`): top 5 *lượt* trả lời đúng có `time_ms` nhỏ nhất cả ván (một người có thể xuất hiện nhiều lần), kèm số câu.
+- **✔ Trả lời đúng nhiều nhất** (`mostCorrect`): top 5 theo số câu đúng; hòa thì tổng thời gian trả lời đúng nhỏ hơn thắng; hiện thêm thời gian TB.
+- **🌟 Xuất sắc nhất mỗi đội** (`teamBest`): thành viên điểm cao nhất mỗi đội (hòa → nhiều câu đúng hơn), sắp theo hạng đội; bỏ đội mà người cao nhất 0 điểm. (Ý tưởng "đóng góp nhiều nhất" được gộp vào đây vì với điểm đội = trung bình thì hai giải trùng nhau.)
+- Màn `awardsView` (`views.ts`) hiện từ dưới lên, người hạng 1 xuất hiện cuối kèm pháo giấy. Điện thoại của người có tên trên màn đang chiếu hiện "🎉 Bạn được vinh danh!" (`PlayerState.honor`).
 
 ## 10. Giao thức Socket.IO
 
@@ -224,8 +236,9 @@ Client gửi (đều có ack `{ ok, error? }`):
 - **questionView**: câu hỏi, đồng hồ vòng tròn (tích tắc 5 giây cuối, gấp hơn 3 giây cuối), ảnh minh họa (hoặc ngựa chạy), số người đã trả lời, dải "feed" tên + thời gian người vừa trả lời (tối đa 30 chip), 2–4 ô đáp án màu/hình. Khi sang `reveal`: đánh dấu ✔/✘ trên ô, thay ảnh bằng biểu đồ cột số người chọn từng đáp án + top 3 đúng nhanh nhất (hoặc "Không ai trả lời đúng 😅").
 - **raceView**: gắn `RaceTrack` dùng chung; tiêu đề "sau câu x/y".
 - **boardView**: nếu có `round`: cột *Thứ tự (kèm ▲/▼ đổi hạng), Người chơi (⚡ nếu nhanh nhất), Đáp án (hình + ✔/✘), Thời gian, Điểm lượt này, Tổng điểm*; top 3 được tô nổi. Nếu không có `round` (ví dụ sau khi khôi phục): chỉ *Thứ tự, Người chơi, Tổng điểm*. Hiển thị **tất cả** người chơi trong bảng có cuộn.
+- **awardsView**: tiêu đề giải, danh sách lớn (giải cá nhân) hoặc lưới thẻ đội (`teamBest`).
 - **teamFinalView**: bục 2-1-3 cho đội (ngựa của từng thành viên, tên thành viên, điểm TB), danh sách đội hạng 4–15.
-- **finalView**: bục 2-1-3 cá nhân, danh sách hạng 4–15, nút Xuất CSV / Ván mới / Về sảnh.
+- **finalView**: bục 2-1-3 cá nhân, danh sách hạng 4–15. Màn kết thúc **cuối cùng** (bục đội, hoặc bục cá nhân nếu không có đội) có thêm nút Xuất CSV / Ván mới / Về sảnh (`finalActions`).
 
 `race.ts` (`RaceTrack`):
 - Mỗi người chơi một làn (`.race-row`): nhãn trái (tên đội ở làn đầu nhóm, hạng, tên, điểm chạy số) + làn có ngựa SVG và 👑 cho người dẫn đầu.
@@ -264,21 +277,20 @@ Bảng SQLite (`data/ka-tok.sqlite`, WAL):
 - `results(game_id, player_id, player_name, score, rank)`
 - `kv(key, value)` — `secret` (cho token host) và `snapshot`.
 
-Snapshot (`v: 1`) được ghi **mỗi lần `changed()`**: gameId, started, setId, danh sách câu đã chuẩn bị, qIndex, phase, players (bỏ socketId), teams, round, adjustments.
+Snapshot (`v: 1`) được ghi **mỗi lần `changed()`**: gameId, started, setId, danh sách câu đã chuẩn bị, qIndex, phase, players (bỏ socketId), teams, round, adjustments, `ended`, `endIndex` (snapshot cũ không có hai trường này thì suy ra từ phase).
 Khi khởi động `restore()`:
 - Luôn khôi phục đội.
 - Nếu có người chơi hoặc ván đã bắt đầu: khôi phục toàn bộ; nếu đang `getready/question` thì lùi `qIndex` 1, xóa `round`, đặt phase `leaderboard` (hoặc `lobby` nếu chưa bắt đầu) → bấm next sẽ **hỏi lại câu bị gián đoạn**.
 - Cờ `restored` → host đầu tiên kết nối thấy toast "♻️ Đã khôi phục…".
 - Người chơi tự vào lại bằng token.
 
-CSV (`exportRows`): cột *Hạng, Người chơi, [Đội], Câu 1..N (điểm từng câu), Chấm tay, Tổng điểm*; nếu có đội thêm bảng *Hạng đội, Đội, Thành viên, Điểm đội (trung bình)*.
+CSV (`exportRows`): cột *Hạng, Người chơi, [Đội], Câu 1..N (điểm từng câu), Chấm tay, Tổng điểm, Số câu đúng*; nếu có đội thêm bảng *Hạng đội, Đội, Thành viên, Điểm đội (trung bình)*.
 
 ## 15. Những điểm cần lưu ý / hạn chế đã quan sát
 
 - **Toast** (`public/css/base.css` `.toast`, `dom.ts → toast`): ẩn bằng `transform: translate(-50%, 140%)` từ `bottom: 28px`, không có `opacity/visibility` — khi ẩn nó trượt xuống đáy màn hình thay vì biến mất hẳn (khớp với bug "thông báo chạy xuống cuối màn hình mà không biến mất" ghi trong `ideas/Dieu-chinh-game-v1.txt`).
 - Tham gia bằng link tự nhập: `selectUrl` chỉ đổi URL hiển thị/QR, không đổi gì ở server. Bug "không vào được bằng link tự tạo, phải dùng cloudflare tunnel" được ghi trong `ideas/Dieu-chinh-game-v1.txt`, **chưa xác định nguyên nhân**.
 - Đông người (>100): đường đua 1 làn/người và bảng kết quả hiển thị tất cả → khó đọc trên màn hình lớn (vấn đề #1 trong `ideas/Dieu-chinh-game-v1.txt`).
-- Kết thúc chỉ có bục top 3 đội + top 3 cá nhân (vấn đề #2 — muốn thêm các màn "Trao giải").
 - `MAX_TEAM_SIZE = 3` là hằng số cứng trong `shared/types.ts` (bot cũng giả định 3).
 - Một số thao tác (rename, kick, adjust) không lọc theo phase — host có thể làm bất cứ lúc nào.
 - `scripts/bots.mjs` mặc định 18 bot với tên kiểu `A1 - 1 🤖` và tự xếp 3 bot/đội; README nói mặc định 8.

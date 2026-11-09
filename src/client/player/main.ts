@@ -208,7 +208,7 @@ function render(s: PlayerState) {
     pendingChoice = null;
   }
   const answered = s.myAnswer !== null || pendingChoice !== null;
-  const key = `${s.phase}|${q?.index ?? ''}|${answered}|${s.result ? 'r' : ''}|${s.me.color}|${s.me.teamId}`;
+  const key = `${s.phase}|${q?.index ?? ''}|${answered}|${s.result ? 'r' : ''}|${s.me.color}|${s.me.teamId}|${s.honor ?? ''}`;
   if (key === screenKey) {
     updateLive(s);
     return;
@@ -241,6 +241,29 @@ function render(s: PlayerState) {
     case 'race':
     case 'leaderboard':
       renderResult(s);
+      break;
+
+    case 'awards':
+      if (s.honor) {
+        navigator.vibrate?.([60, 80, 60, 80, 120]);
+        sfx.correct();
+      }
+      screen.innerHTML = s.honor
+        ? `
+        <div class="panel center pop-in final-card">
+          <div class="big-emoji">🎉</div>
+          <h2>Bạn được vinh danh!</h2>
+          <p class="honor">${esc(s.honor)}</p>
+          <div class="lobby-horse">${horseSvg(s.me.color, 'running')}</div>
+          <p>Nhìn lên màn hình lớn nào!</p>
+        </div>`
+        : `
+        <div class="panel center pop-in">
+          <div class="big-emoji">🏅</div>
+          <h2>Đang trao giải…</h2>
+          <p>Nhìn lên màn hình lớn nhé!</p>
+          <div class="rank-line">Bạn đang hạng <b>${s.me.rank}</b> / ${s.me.total}</div>
+        </div>`;
       break;
 
     case 'teamfinal': {

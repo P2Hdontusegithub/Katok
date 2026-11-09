@@ -1,5 +1,5 @@
-import type { HostAction, HostState, PublicPlayer, PublicTeam, RoundRow } from '../../shared/types';
-import { ANSWER_LETTERS, MAX_TEAM_SIZE, PLAYER_COLORS } from '../../shared/types';
+import type { AwardEntry, HostAction, HostState, PublicPlayer, PublicTeam, RoundRow } from '../../shared/types';
+import { ANSWER_LETTERS, AWARD_TITLES, MAX_TEAM_SIZE, PLAYER_COLORS } from '../../shared/types';
 import { countTo, esc, fmtPoints, fmtTime } from '../common/dom';
 import { horseSvg, playerColor } from '../common/horse';
 import { ANSWER_COLORS, ANSWER_NAMES, shapeSvg } from '../common/shapes';
@@ -425,13 +425,14 @@ export function boardView(stage: HTMLElement, s: HostState): View {
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 /** Team podium (shown before the individual one): the whole team stands on its block. */
-export function teamFinalView(stage: HTMLElement, s: HostState): View {
+export function teamFinalView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
   stage.innerHTML = `
     <div class="final team-final">
       <h1 class="final-title slide-up">🏆 Đồng đội 🏆</h1>
       <div class="podium"></div>
       <ol class="rest"></ol>
     </div>`;
+  if (isLastEnd(s)) stage.querySelector('.final')!.append(finalActions(ctx));
   const podium = stage.querySelector<HTMLElement>('.podium')!;
   const rest = stage.querySelector<HTMLElement>('.rest')!;
   const update = (s: HostState) => {
@@ -465,18 +466,8 @@ export function finalView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
       <h1 class="final-title slide-up">🏆 Chung cuộc 🏆</h1>
       <div class="podium"></div>
       <ol class="rest"></ol>
-      <div class="final-actions">
-        <button class="btn ghost" data-act="export">⬇ Xuất kết quả (CSV)</button>
-        <button class="btn" data-act="newGame">🔁 Ván mới (giữ người chơi)</button>
-        <button class="btn ghost" data-act="toLobby">🏠 Về sảnh (xoá người chơi)</button>
-      </div>
     </div>`;
-  stage.querySelector<HTMLElement>('.final-actions')!.onclick = (e) => {
-    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
-    if (act === 'export') window.dispatchEvent(new CustomEvent('katok:export'));
-    if (act === 'newGame' && confirm('Bắt đầu ván mới? Điểm sẽ về 0.')) ctx.send({ type: 'newGame' });
-    if (act === 'toLobby' && confirm('Về sảnh và xoá tất cả người chơi?')) ctx.send({ type: 'toLobby' });
-  };
+  if (isLastEnd(s)) stage.querySelector('.final')!.append(finalActions(ctx));
   const podium = stage.querySelector<HTMLElement>('.podium')!;
   const rest = stage.querySelector<HTMLElement>('.rest')!;
   const update = (s: HostState) => {
@@ -500,3 +491,82 @@ export function finalView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
   update(s);
   return { update };
 }
+
+// ───────────────────────── Awards ─────────────────────────
+
+/** One special award per screen, revealed from the last place up to the winner. */
+export function awardsView(stage: HTMLElement, s: HostState): View {
+  const step = s.endSteps[s.endIndex];
+  const award = step?.phase === 'awards' ? s.awards[step.award] : undefined;
+  if (!award) {
+    stage.innerHTML = '<div class="final"><h1 class="final-title">🏆</h1></div>';
+    return { update() {} };
+  }
+  const t = AWARD_TITLES[award.kind];
+  const n = award.entries.length;
+  const sub: Record<typeof award.kind, string> = {
+    fastest: 'Những lần bấm đúng nhanh nhất cả trận',
+    mostCorrect: `Nhiều câu đúng nhất trong ${award.questionCount} câu tính điểm`,
+    teamBest: 'Thành viên ghi điểm cao nhất của từng đội',
+  };
+  const team = (e: AwardEntry) =>
+    e.teamName ? `<span class="aw-team" style="--tc:${playerColor(e.teamColor ?? e.color)}">${esc(e.teamName)}</span>` : '';
+  // Reveal bottom-up: the winner (index 0) appears last.
+  const delay = (i: number) => `animation-delay:${0.6 + (n - 1 - i) * 0.7}s`;
+
+  const body =
+    award.kind === 'teamBest'
+      ? `<div class="aw-grid">${award.entries
+          .map(
+            (e, i) => `
+          <div class="aw-card" style="--pc:${playerColor(e.color)};${delay(i)}">
+            <div class="aw-card-team">${esc(e.teamName ?? '')}</div>
+            <div class="aw-horse">${horseSvg(e.color, 'running')}</div>
+            <div class="aw-name">${esc(e.name)}</div>
+            <div class="aw-value">${fmtPoints(e.score ?? 0)} <small>điểm</small></div>
+            <div class="aw-detail">${e.correct ?? 0} câu đúng</div>
+          </div>`,
+          )
+          .join('')}</div>`
+      : `<ol class="aw-list">${award.entries
+          .map((e, i) => {
+            const value = award.kind === 'fastest' ? fmtTime(e.timeMs ?? null) : `${e.correct ?? 0}<small>/${award.questionCount} câu</small>`;
+            const detail = award.kind === 'fastest' ? `Câu ${(e.questionIndex ?? 0) + 1}` : `TB ${fmtTime(e.timeMs ?? null)}`;
+            return `
+          <li class="aw-row ${i === 0 ? 'first' : ''}" style="--pc:${playerColor(e.color)};${delay(i)}">
+            <b class="aw-rank">${MEDALS[i] ?? i + 1}</b>
+            <span class="aw-horse">${horseSvg(e.color, i === 0 ? 'running' : '')}</span>
+            <span class="aw-who"><span class="aw-name">${esc(e.name)}</span>${team(e)}</span>
+            <span class="aw-detail">${detail}</span>
+            <span class="aw-value">${value}</span>
+          </li>`;
+          })
+          .join('')}</ol>`;
+
+  stage.innerHTML = `
+    <div class="final awards aw-${award.kind}">
+      <h1 class="final-title slide-up">${t.icon} ${t.title}</h1>
+      <p class="aw-sub slide-up">${sub[award.kind]}</p>
+      ${body}
+    </div>`;
+  return { update() {} };
+}
+
+/** Buttons shown on the last end screen. */
+function finalActions(ctx: Ctx): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'final-actions';
+  el.innerHTML = `
+    <button class="btn ghost" data-act="export">⬇ Xuất kết quả (CSV)</button>
+    <button class="btn" data-act="newGame">🔁 Ván mới (giữ người chơi)</button>
+    <button class="btn ghost" data-act="toLobby">🏠 Về sảnh (xoá người chơi)</button>`;
+  el.onclick = (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+    if (act === 'export') window.dispatchEvent(new CustomEvent('katok:export'));
+    if (act === 'newGame' && confirm('Bắt đầu ván mới? Điểm sẽ về 0.')) ctx.send({ type: 'newGame' });
+    if (act === 'toLobby' && confirm('Về sảnh và xoá tất cả người chơi?')) ctx.send({ type: 'toLobby' });
+  };
+  return el;
+}
+
+const isLastEnd = (s: HostState) => s.endIndex >= 0 && s.endIndex === s.endSteps.length - 1;

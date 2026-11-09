@@ -1,6 +1,9 @@
 // Types shared by server and client (type-only, erased at build time).
 
-export type Phase = 'lobby' | 'getready' | 'question' | 'reveal' | 'race' | 'leaderboard' | 'teamfinal' | 'final';
+export type Phase = 'lobby' | 'getready' | 'question' | 'reveal' | 'race' | 'leaderboard' | 'awards' | 'teamfinal' | 'final';
+
+/** Screens shown once the game is over, in order (`awards` steps carry an index into `awards`). */
+export type EndStep = { phase: 'awards'; award: number } | { phase: 'final' } | { phase: 'teamfinal' };
 
 export const MAX_TEAM_SIZE = 3;
 
@@ -71,6 +74,30 @@ export interface RoundResult {
   rows: RoundRow[];
 }
 
+export type AwardKind = 'fastest' | 'mostCorrect' | 'teamBest';
+
+export interface AwardEntry {
+  playerId: string;
+  name: string;
+  color: number;
+  teamName: string | null;
+  teamColor: number | null;
+  /** fastest: answer time of that single answer; mostCorrect: average time of the correct answers. */
+  timeMs?: number;
+  /** fastest only: which question (0-based). */
+  questionIndex?: number;
+  /** Number of correct answers in the whole game (mostCorrect, teamBest). */
+  correct?: number;
+  score?: number;
+}
+
+export interface Award {
+  kind: AwardKind;
+  entries: AwardEntry[];
+  /** Questions that counted (multiplier > 0), for "x / N câu đúng". */
+  questionCount: number;
+}
+
 export interface QuestionSetInfo {
   id: string;
   title: string;
@@ -101,6 +128,11 @@ export interface HostState {
   answeredCount: number;
   feed: FeedItem[];
   round: RoundResult | null;
+  /** Special awards, available once the game is over (empty awards are left out). */
+  awards: Award[];
+  /** The screens after the game in order, and which one is showing (-1 = none). */
+  endSteps: EndStep[];
+  endIndex: number;
   adjustments: Adjustment[];
   joinUrls: string[];
   joinUrl: string;
@@ -125,12 +157,15 @@ export interface PlayerState {
   question: { index: number; total: number; answerCount: number; remainingMs: number } | null;
   myAnswer: { choice: number; timeMs: number } | null;
   result: PlayerResult | null;
+  /** On an award screen that lists this player: e.g. "⚡ Trả lời đúng nhanh nhất · hạng 1". */
+  honor: string | null;
 }
 
 export type HostAction =
   | { type: 'start' }
   | { type: 'next' }
   | { type: 'goto'; phase: 'race' | 'leaderboard' }
+  | { type: 'gotoEnd'; index: number }
   | { type: 'end' }
   | { type: 'newGame' }
   | { type: 'toLobby' }
@@ -151,6 +186,12 @@ export interface Ack {
   ok: boolean;
   error?: string;
 }
+
+export const AWARD_TITLES: Record<AwardKind, { icon: string; title: string; short: string }> = {
+  fastest: { icon: '⚡', title: 'Trả lời đúng nhanh nhất', short: 'Nhanh nhất' },
+  mostCorrect: { icon: '✔', title: 'Trả lời đúng nhiều nhất', short: 'Đúng nhiều' },
+  teamBest: { icon: '🌟', title: 'Xuất sắc nhất mỗi đội', short: 'Xuất sắc đội' },
+};
 
 export const ANSWER_LETTERS = ['A', 'B', 'C', 'D'];
 
