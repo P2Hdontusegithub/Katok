@@ -5,7 +5,7 @@ import { isMuted, setMuted, sfx, startMusic, stopMusic, unlockAudio } from '../c
 import { confetti } from './confetti';
 import { ManualPanel } from './manual';
 import { RaceTrack } from './race';
-import { boardView, finalView, getReadyView, lobbyView, questionView, raceView, type Ctx, type View } from './views';
+import { boardView, finalView, getReadyView, lobbyView, questionView, raceView, teamFinalView, type Ctx, type View } from './views';
 
 decorateBackground();
 const socket = connect();
@@ -91,6 +91,7 @@ function onPhaseChange(prev: HostState | null, s: HostState) {
     case 'leaderboard':
       sfx.pop();
       break;
+    case 'teamfinal':
     case 'final':
       sfx.fanfare();
       confetti();
@@ -105,7 +106,7 @@ function render(s: HostState) {
   if (s.restored && !prev) toast('♻️ Đã khôi phục ván chơi trước khi máy chủ khởi động lại.', 'ok');
 
   // Keep horses at their pre-round positions so the race screen can animate the gain.
-  if (s.phase === 'lobby' || s.phase === 'getready' || s.phase === 'question') ctx.track.update(s.players, false);
+  if (s.phase === 'lobby' || s.phase === 'getready' || s.phase === 'question') ctx.track.update(s.players, s.teams, false);
 
   const key = keyFor(s);
   if (key !== viewKey) {
@@ -119,6 +120,7 @@ function render(s: HostState) {
       case 'reveal': view = questionView(stage, s); break;
       case 'race': view = raceView(stage, s, ctx); break;
       case 'leaderboard': view = boardView(stage, s); break;
+      case 'teamfinal': view = teamFinalView(stage, s); break;
       case 'final': view = finalView(stage, s, ctx); break;
     }
   } else {
@@ -135,6 +137,7 @@ const NEXT_LABEL: Record<HostState['phase'], string> = {
   reveal: 'Đường đua 🏇',
   race: 'Bảng điểm 📋',
   leaderboard: 'Câu tiếp ▶',
+  teamfinal: 'Bục cá nhân 🏅',
   final: '',
 };
 
@@ -148,8 +151,8 @@ function renderBar(s: HostState) {
   $('#bar-set').textContent = s.setTitle || 'Ka-tok';
   $('#bar-q').textContent = s.question ? `Câu ${s.question.index + 1}/${s.question.total}` : '';
   $('#bar-players').textContent = `👥 ${s.players.filter((p) => p.connected || p.manual).length}/${s.players.length}`;
-  $<HTMLButtonElement>('#btn-race').hidden = !['reveal', 'leaderboard', 'final'].includes(s.phase);
-  $<HTMLButtonElement>('#btn-board').hidden = !['race', 'final'].includes(s.phase);
+  $<HTMLButtonElement>('#btn-race').hidden = !['reveal', 'leaderboard', 'teamfinal', 'final'].includes(s.phase);
+  $<HTMLButtonElement>('#btn-board').hidden = !['race', 'teamfinal', 'final'].includes(s.phase);
 }
 
 socket.on('host:state', (s: HostState) => render(s));

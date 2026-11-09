@@ -1,11 +1,11 @@
 {
-  "version": "0.0.1",
-  "configurations": [
-    {
-      "name": "katok-dev",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["build.mjs", "--watch"],
-      "port": 3000
-    }
-  ]
+	"version": "1.0",
+	"configurations": [
+		{
+			"name": "katok-dev",
+			"runtimeExecutable": "node",
+			"runtimeArgs": ["build.mjs", "--watch"],
+			"port": 3000
+		}
+	]
 }

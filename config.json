@@ -4,7 +4,7 @@
   "publicUrl": "",
   "latencyCompensationMs": 800,
   "autoEndWhenAllAnswered": true,
-  "maxPlayers": 150,
+  "maxPlayers": 180,
   "scoring": {
     "maxPoints": 1000,
     "minPoints": 500,

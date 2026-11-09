@@ -1,6 +1,8 @@
 // Types shared by server and client (type-only, erased at build time).
 
-export type Phase = 'lobby' | 'getready' | 'question' | 'reveal' | 'race' | 'leaderboard' | 'final';
+export type Phase = 'lobby' | 'getready' | 'question' | 'reveal' | 'race' | 'leaderboard' | 'teamfinal' | 'final';
+
+export const MAX_TEAM_SIZE = 3;
 
 export interface PublicPlayer {
   id: string;
@@ -10,6 +12,24 @@ export interface PublicPlayer {
   connected: boolean;
   /** Added by host from the manual scoring screen (no phone). */
   manual: boolean;
+  teamId: string | null;
+}
+
+export interface PublicTeam {
+  id: string;
+  name: string;
+  color: number;
+  /** Average score of the members (0 when empty). */
+  score: number;
+  memberIds: string[];
+}
+
+/** What the join page / lobby needs to let a player pick a team. */
+export interface TeamOption {
+  id: string;
+  name: string;
+  color: number;
+  count: number;
 }
 
 export interface QuestionPublic {
@@ -69,6 +89,7 @@ export interface Adjustment {
 export interface HostState {
   phase: Phase;
   players: PublicPlayer[];
+  teams: PublicTeam[];
   questionSets: QuestionSetInfo[];
   setId: string | null;
   setTitle: string;
@@ -83,6 +104,8 @@ export interface HostState {
   adjustments: Adjustment[];
   joinUrls: string[];
   joinUrl: string;
+  /** Set when phones on the LAN probably cannot reach the server (Windows firewall). */
+  lanWarning: string | null;
   restored: boolean;
 }
 
@@ -97,7 +120,8 @@ export interface PlayerResult {
 
 export interface PlayerState {
   phase: Phase;
-  me: { id: string; name: string; color: number; score: number; rank: number; total: number };
+  me: { id: string; name: string; color: number; score: number; rank: number; total: number; teamId: string | null };
+  myTeam: { name: string; color: number; score: number; rank: number; total: number } | null;
   question: { index: number; total: number; answerCount: number; remainingMs: number } | null;
   myAnswer: { choice: number; timeMs: number } | null;
   result: PlayerResult | null;
@@ -117,7 +141,11 @@ export type HostAction =
   | { type: 'rename'; playerId: string; name: string }
   | { type: 'addPlayer'; name: string }
   | { type: 'adjust'; changes: { playerId: string; delta: number }[]; reason: string; showRace?: boolean }
-  | { type: 'setScore'; playerId: string; score: number };
+  | { type: 'setScore'; playerId: string; score: number }
+  | { type: 'createTeam'; name: string; color: number }
+  | { type: 'updateTeam'; teamId: string; name?: string; color?: number }
+  | { type: 'deleteTeam'; teamId: string }
+  | { type: 'setTeam'; playerId: string; teamId: string | null };
 
 export interface Ack {
   ok: boolean;

@@ -1,5 +1,6 @@
 // Manual scoring screen – backup when phones/network fail, or for corrections.
 import type { HostState } from '../../shared/types';
+import { MAX_TEAM_SIZE } from '../../shared/types';
 import { esc, fmtPoints, toast } from '../common/dom';
 import { playerColor } from '../common/horse';
 import type { Ctx } from './views';
@@ -79,6 +80,14 @@ export class ManualPanel {
       const t = e.target as HTMLInputElement;
       if (t.classList.contains('delta')) this.drafts.set(t.dataset.id!, t.value);
     });
+    this.body.addEventListener('change', (e) => {
+      const t = e.target as HTMLSelectElement;
+      if (!t.classList.contains('team-sel')) return;
+      const id = t.closest<HTMLElement>('tr')!.dataset.id!;
+      this.ctx.send({ type: 'setTeam', playerId: id, teamId: t.value || null }).then((ok) => {
+        if (!ok) this.toggle(true); // re-render to undo the selection
+      });
+    });
     this.body.addEventListener('click', async (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLElement>('button');
       if (!btn) return;
@@ -134,19 +143,29 @@ export class ManualPanel {
   update(s: HostState) {
     this.state = s;
     if (!this.open) return;
-    const sig = JSON.stringify([s.players, s.adjustments.length]);
+    const sig = JSON.stringify([s.players, s.teams, s.phase === 'lobby', s.adjustments.length]);
     if (sig === this.sig) return;
     this.sig = sig;
     const focused = document.activeElement as HTMLInputElement | null;
     const focusKey = focused?.closest('.manual-table') ? `${focused.closest('tr')?.dataset.id}|${focused.className}` : null;
     const sorted = [...s.players].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'vi'));
+    // Teams can only be changed before the game starts.
+    const teamCell = (p: (typeof sorted)[number]) => {
+      if (!s.teams.length) return '';
+      if (s.phase !== 'lobby') {
+        const t = s.teams.find((x) => x.id === p.teamId);
+        return t ? ` <small class="m-team">· ${esc(t.name)}</small>` : '';
+      }
+      const opts = s.teams.map((t) => `<option value="${t.id}" ${t.id === p.teamId ? 'selected' : ''}>${esc(t.name)} (${t.memberIds.length}/${MAX_TEAM_SIZE})</option>`);
+      return ` <select class="team-sel" title="Đội"><option value="">— Không đội —</option>${opts.join('')}</select>`;
+    };
     this.body.innerHTML =
       sorted
         .map((p, i) => {
           const rank = 1 + sorted.filter((o) => o.score > p.score).length;
           return `<tr data-id="${p.id}" style="--pc:${playerColor(p.color)}">
           <td>${rank || i + 1}</td>
-          <td class="m-name"><i class="dot ${p.connected ? 'on' : p.manual ? 'manual' : 'off'}" title="${p.manual ? 'Chấm tay' : p.connected ? 'Đang kết nối' : 'Mất kết nối'}"></i>${esc(p.name)}${p.manual ? ' <small>✍️</small>' : ''}</td>
+          <td class="m-name"><i class="dot ${p.connected ? 'on' : p.manual ? 'manual' : 'off'}" title="${p.manual ? 'Chấm tay' : p.connected ? 'Đang kết nối' : 'Mất kết nối'}"></i>${esc(p.name)}${p.manual ? ' <small>✍️</small>' : ''}${teamCell(p)}</td>
           <td class="m-score">${fmtPoints(p.score)}</td>
           <td class="m-quick"><button data-q="-100">−100</button><button data-q="100">+100</button><button data-q="500">+500</button></td>
           <td><input class="delta" data-id="${p.id}" type="number" step="50" placeholder="0" value="${esc(this.drafts.get(p.id) ?? '')}" /></td>

@@ -9,6 +9,7 @@ import type { Ack, HostAction } from '../shared/types';
 import { loadConfig, ROOT } from './config';
 import { Db } from './db';
 import { Game } from './game';
+import { checkFirewall, FIREWALL_RULE } from './firewall';
 import { lanAddresses } from './net';
 import { loadQuestionSets } from './questions';
 
@@ -33,6 +34,7 @@ let pendingAll = false;
 let pendingHosts = false;
 const pendingPlayers = new Set<string>();
 let flushScheduled = false;
+let lastTeams = '';
 
 function scheduleFlush() {
   if (flushScheduled) return;
@@ -40,6 +42,14 @@ function scheduleFlush() {
   setImmediate(() => {
     flushScheduled = false;
     if (pendingAll || pendingHosts) io.to('hosts').emit('host:state', game.hostState());
+    if (pendingAll) {
+      // The team list also goes to phones still on the join screen.
+      const teams = JSON.stringify(game.teamOptions());
+      if (teams !== lastTeams) {
+        lastTeams = teams;
+        io.except('hosts').emit('teams', game.teamOptions());
+      }
+    }
     const ids = pendingAll ? game.playerIds() : [...pendingPlayers];
     for (const id of ids) {
       const sid = game.socketOf(id);
@@ -128,6 +138,8 @@ function isHost(socket: Socket) {
 }
 
 io.on('connection', (socket) => {
+  socket.emit('teams', game.teamOptions());
+
   socket.on('host:auth', (payload: { password?: string; token?: string }, ack: (r: Ack & { token?: string }) => void) => {
     const ok = payload?.token === HOST_TOKEN || (typeof payload?.password === 'string' && payload.password === cfg.hostPassword);
     const token = ok ? HOST_TOKEN : undefined;
@@ -175,6 +187,16 @@ io.on('connection', (socket) => {
         case 'addPlayer': r = game.addManualPlayer(String(action.name ?? '')); break;
         case 'adjust': r = game.adjust(Array.isArray(action.changes) ? action.changes : [], String(action.reason ?? ''), !!action.showRace); break;
         case 'setScore': r = game.setScore(action.playerId, Number(action.score)); break;
+        case 'createTeam': r = game.createTeam(String(action.name ?? ''), Number(action.color)); break;
+        case 'updateTeam':
+          r = game.updateTeam(
+            String(action.teamId),
+            action.name === undefined ? undefined : String(action.name),
+            action.color === undefined ? undefined : Number(action.color),
+          );
+          break;
+        case 'deleteTeam': r = game.deleteTeam(String(action.teamId)); break;
+        case 'setTeam': r = game.setTeam(String(action.playerId), action.teamId ? String(action.teamId) : null); break;
         default: r = { ok: false, error: 'Lệnh không hợp lệ.' };
       }
     } catch (err) {
@@ -184,8 +206,8 @@ io.on('connection', (socket) => {
     ack?.(r);
   });
 
-  socket.on('player:join', (payload: { name?: string; token?: string }, ack: (r: Ack & { token?: string }) => void) => {
-    const r = game.join(socket.id, payload?.name, payload?.token);
+  socket.on('player:join', (payload: { name?: string; token?: string; teamId?: string }, ack: (r: Ack & { token?: string }) => void) => {
+    const r = game.join(socket.id, payload?.name, payload?.token, payload?.teamId ? String(payload.teamId) : null);
     if (r.ok && r.playerId) {
       socket.data.playerId = r.playerId;
       socket.emit('player:state', game.playerState(r.playerId));
@@ -202,6 +224,11 @@ io.on('connection', (socket) => {
   socket.on('player:color', (_: unknown, ack: (r: Ack) => void) => {
     const id = socket.data.playerId as string | undefined;
     ack?.(id ? game.changeColor(id) : { ok: false });
+  });
+
+  socket.on('player:team', (payload: { teamId?: string | null }, ack: (r: Ack) => void) => {
+    const id = socket.data.playerId as string | undefined;
+    ack?.(id ? game.setTeam(id, payload?.teamId ? String(payload.teamId) : null) : { ok: false, error: 'Bạn chưa vào phòng.' });
   });
 
   socket.on('disconnect', () => game.disconnect(socket.id));
@@ -232,5 +259,43 @@ server.listen(cfg.port, '0.0.0.0', () => {
   for (const u of game.joinUrls.slice(0, -1)) console.log(`     → ${u}`);
   if (!ips.length) console.log('     (không tìm thấy mạng LAN — hãy kết nối Wi-Fi/hotspot)');
   if (restored) console.log(`\n  ♻️  Đã khôi phục ván chơi trước khi tắt máy chủ.`);
+
+  // Phones on the LAN fail to load the page while tunnels still work: that is
+  // the Windows firewall blocking inbound connections. Warn in the terminal
+  // and on the host lobby screen.
+  void checkFirewall(cfg.port).then((fw) => {
+    if (!fw) return;
+    if (fw.thirdParty.length) {
+      // A third-party firewall replaces Windows Firewall: its own rules decide.
+      const name = fw.thirdParty.join(', ');
+      game.lanWarning =
+        `Máy đang dùng tường lửa của ${name} (thay cho tường lửa Windows) — nếu điện thoại trong mạng LAN không vào được, ` +
+        `hãy thêm luật cho phép cổng ${cfg.port} trong ${name}, hoặc dùng tunnel. Chi tiết: README, mục "Tường lửa".`;
+      console.warn(
+        `\n⚠️  Máy đang dùng tường lửa của ${name}, nó THAY THẾ tường lửa Windows:\n` +
+          `   luật mở cổng trong Windows (netsh, "Allow an app…") KHÔNG có tác dụng.\n` +
+          `   Nếu điện thoại chung Wi-Fi không mở được trang, hãy thêm luật cho phép TCP cổng ${cfg.port}\n` +
+          `   (chiều vào) ngay trong ${name}, hoặc dùng tunnel. Chi tiết: README, mục "Tường lửa".\n`,
+      );
+      io.to('hosts').emit('host:state', game.hostState());
+      return;
+    }
+    if (fw.allowed && !fw.blocked) return;
+    const why = fw.blocked
+      ? 'Tường lửa Windows đang CHẶN Node.js'
+      : `Tường lửa Windows chưa mở cổng ${cfg.port} (mạng đang là "${fw.profiles.join(', ') || '?'}")`;
+    game.lanWarning = `${why} — điện thoại trong mạng LAN sẽ không vào được. Xem cửa sổ terminal hoặc mục "Tường lửa Windows" trong README để mở cổng.`;
+    console.warn(
+      `\n⚠️  ${why}.\n   Điện thoại chung Wi-Fi sẽ KHÔNG mở được trang (chỉ tunnel mới chạy).\n` +
+        `   Cách sửa: mở PowerShell bằng "Run as administrator" rồi chạy:\n\n` +
+        `     netsh advfirewall firewall add rule name="${FIREWALL_RULE}" dir=in action=allow protocol=TCP localport=${cfg.port} profile=any\n` +
+        (fw.blocked
+          ? `\n   Và tắt luật đang chặn Node.js: Windows Security → Firewall → Advanced settings → Inbound Rules\n` +
+            `   → tắt (Disable) các dòng "Node.js" có biểu tượng cấm màu đỏ.\n`
+          : '') +
+        `\n   Chi tiết: README, mục "Tường lửa Windows".\n`,
+    );
+    io.to('hosts').emit('host:state', game.hostState());
+  });
   console.log(`${line}\n  Nhấn Ctrl + C để tắt.\n`);
 });

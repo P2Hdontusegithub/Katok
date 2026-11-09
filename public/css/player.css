@@ -12,7 +12,29 @@ body.player { touch-action: manipulation; user-select: none; -webkit-user-select
   background: rgba(20, 0, 50, 0.3); font-weight: 800;
 }
 .me-horse { width: 48px; flex: none; }
-.me-name { flex: 1; min-width: 0; font-size: 1.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-who { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.me-name { font-size: 1.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-team { align-self: flex-start; max-width: 100%; background: var(--tc); color: #fff; font-size: 0.85rem; padding: 0 8px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Team picker (join form + lobby) */
+.team-pick { display: grid; gap: 8px; }
+.team-pick-title { font-weight: 800; color: var(--ink-soft); }
+.team-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%; border: 3px solid #e3d8f5; background: #fff; color: var(--ink);
+  border-radius: 14px; padding: 10px 14px; font: inherit; font-weight: 800; font-size: 1.15rem; cursor: pointer; text-align: left;
+  box-shadow: 0 4px 0 var(--pc); transition: transform 0.08s;
+}
+.team-btn .dot { width: 20px; height: 20px; margin: 0; }
+.team-btn span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-btn small { color: var(--ink-soft); font-size: 0.95rem; }
+.team-btn.on { border-color: var(--pc); background: color-mix(in srgb, var(--pc) 16%, #fff); }
+.team-btn.on small::after { content: ' ✔'; color: var(--pc); }
+.team-btn:active { transform: translateY(3px); }
+.team-btn:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
+.panel .team-pick { width: min(360px, 100%); }
+.panel .team-pick-title { color: #fff; opacity: 0.9; }
+.team-line { font-size: 1.3rem !important; }
+.team-line b { background: var(--tc); padding: 0 10px; border-radius: 8px; }
 .me-score { background: #fff; color: var(--ink); padding: 2px 14px; border-radius: 999px; font-size: 1.15rem; white-space: nowrap; }
 .me-score small { color: var(--ink-soft); font-size: 0.8rem; }
 .screen { flex: 1; display: flex; flex-direction: column; padding: 14px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }

@@ -17,6 +17,7 @@
       <h1 class="logo">Ka<span>-</span>tok</h1>
       <form id="join-form">
         <input id="name" maxlength="20" placeholder="Tên của bạn" autocomplete="nickname" enterkeyhint="go" />
+        <div id="join-teams" class="team-pick" hidden></div>
         <button class="btn big" type="submit">Vào chơi!</button>
       </form>
       <div id="join-error" class="error-text"></div>
@@ -26,7 +27,7 @@
   <section id="game" hidden>
     <header class="ptop">
       <span id="me-horse" class="me-horse"></span>
-      <span id="me-name" class="me-name"></span>
+      <span class="me-who"><span id="me-name" class="me-name"></span><span id="me-team" class="me-team" hidden></span></span>
       <span class="me-score"><span id="me-score">0</span> <small>điểm</small></span>
     </header>
     <main id="screen" class="screen"></main>

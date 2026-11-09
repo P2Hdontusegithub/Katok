@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type {
-  Ack, Adjustment, FeedItem, HostState, Phase, PlayerState, PublicPlayer, RoundResult, RoundRow,
+  Ack, Adjustment, FeedItem, HostState, Phase, PlayerState, PublicPlayer, PublicTeam, RoundResult, RoundRow, TeamOption,
 } from '../shared/types';
-import { PLAYER_COLORS } from '../shared/types';
+import { MAX_TEAM_SIZE, PLAYER_COLORS } from '../shared/types';
 import type { Config } from './config';
 import type { Db } from './db';
 import { prepareQuestions, setInfo, type Question, type QuestionSet } from './questions';
@@ -17,6 +17,13 @@ interface Player {
   score: number;
   socketId: string | null;
   manual: boolean;
+  teamId: string | null;
+}
+
+interface Team {
+  id: string;
+  name: string;
+  color: number;
 }
 
 interface Answer {
@@ -41,6 +48,7 @@ const newId = (bytes = 6) => randomBytes(bytes).toString('hex');
 export class Game {
   phase: Phase = 'lobby';
   private players = new Map<string, Player>();
+  private teams: Team[] = [];
   private sets: QuestionSet[] = [];
   private setId: string | null = null;
   private started = false;
@@ -56,6 +64,7 @@ export class Game {
   private restored = false;
   joinUrls: string[] = [];
   joinUrl = '';
+  lanWarning: string | null = null;
 
   constructor(
     private cfg: Config,
@@ -79,7 +88,12 @@ export class Game {
 
   // ───────────────────────── players ─────────────────────────
 
-  join(socketId: string, name: string | undefined, token: string | undefined): Ack & { token?: string; playerId?: string } {
+  join(
+    socketId: string,
+    name: string | undefined,
+    token: string | undefined,
+    teamId?: string | null,
+  ): Ack & { token?: string; playerId?: string } {
     if (token) {
       const p = [...this.players.values()].find((pl) => pl.token === token);
       if (p) {
@@ -93,8 +107,17 @@ export class Game {
     if (!clean) return { ok: false, error: 'Nhập tên của bạn nhé!' };
     if (this.findByName(clean)) return { ok: false, error: 'Tên này đã có người dùng, chọn tên khác nhé.' };
     if (this.players.size >= this.cfg.maxPlayers) return { ok: false, error: 'Phòng đã đủ người chơi.' };
+    // While some team still has room, picking one is required.
+    const options = this.teamOptions();
+    let team: TeamOption | undefined;
+    if (options.some((t) => t.count < MAX_TEAM_SIZE)) {
+      team = options.find((o) => o.id === teamId);
+      if (!team) return { ok: false, error: 'Chọn đội của bạn nhé!' };
+      if (team.count >= MAX_TEAM_SIZE) return { ok: false, error: `Đội ${team.name} đã đủ ${MAX_TEAM_SIZE} người.` };
+    }
     const p = this.createPlayer(clean, false);
     p.socketId = socketId;
+    if (team) p.teamId = team.id;
     this.changed();
     return { ok: true, token: p.token, playerId: p.id };
   }
@@ -105,21 +128,37 @@ export class Game {
   }
 
   private createPlayer(name: string, manual: boolean): Player {
-    const used = PLAYER_COLORS.map(() => 0);
-    for (const p of this.players.values()) used[p.color]++;
-    const min = Math.min(...used);
-    const free = used.map((n, i) => (n === min ? i : -1)).filter((i) => i >= 0);
     const p: Player = {
       id: newId(),
       token: newId(16),
       name,
-      color: free[Math.floor(Math.random() * free.length)],
+      color: this.freeColor(),
       score: 0,
       socketId: null,
       manual,
+      teamId: null,
     };
     this.players.set(p.id, p);
     return p;
+  }
+
+  /** Least-used colour for a player without a team; team colours are avoided. */
+  private freeColor(): number {
+    const used = PLAYER_COLORS.map(() => 0);
+    for (const t of this.teams) used[t.color] += 1000;
+    for (const p of this.players.values()) if (!p.teamId) used[p.color]++;
+    const min = Math.min(...used);
+    const free = used.map((n, i) => (n === min ? i : -1)).filter((i) => i >= 0);
+    return free[Math.floor(Math.random() * free.length)];
+  }
+
+  /** Team members race in the team colour. */
+  private colorOf(p: Player): number {
+    return this.teamOf(p)?.color ?? p.color;
+  }
+
+  private teamOf(p: Player) {
+    return p.teamId ? this.teams.find((t) => t.id === p.teamId) ?? null : null;
   }
 
   disconnect(socketId: string) {
@@ -147,9 +186,131 @@ export class Game {
   changeColor(playerId: string): Ack {
     const p = this.players.get(playerId);
     if (!p) return { ok: false };
-    p.color = (p.color + 1) % PLAYER_COLORS.length;
+    if (this.teamOf(p)) return { ok: false, error: 'Ngựa trong đội dùng màu của đội.' };
+    const taken = new Set(this.teams.map((t) => t.color));
+    for (let i = 1; i <= PLAYER_COLORS.length; i++) {
+      const c = (p.color + i) % PLAYER_COLORS.length;
+      if (!taken.has(c)) {
+        p.color = c;
+        break;
+      }
+    }
     this.changed();
     return { ok: true };
+  }
+
+  // ───────────────────────── teams ─────────────────────────
+
+  private cleanTeamName(name: string) {
+    return name.replace(/\s+/g, ' ').trim().slice(0, 12);
+  }
+
+  private teamNameTaken(name: string, exceptId?: string) {
+    const key = name.toLocaleLowerCase('vi');
+    return this.teams.some((t) => t.id !== exceptId && t.name.toLocaleLowerCase('vi') === key);
+  }
+
+  private validTeamColor(color: number, exceptId?: string): string | null {
+    if (!Number.isInteger(color) || color < 0 || color >= PLAYER_COLORS.length) return 'Màu không hợp lệ.';
+    if (this.teams.some((t) => t.id !== exceptId && t.color === color)) return 'Màu này đội khác đã chọn.';
+    return null;
+  }
+
+  /** Players can only pick or switch teams before the game starts. */
+  private get teamsOpen() {
+    return !this.started;
+  }
+
+  createTeam(name: string, color: number): Ack {
+    if (!this.teamsOpen) return { ok: false, error: 'Chỉ tạo đội khi đang ở sảnh chờ.' };
+    const clean = this.cleanTeamName(name);
+    if (!clean) return { ok: false, error: 'Nhập tên đội.' };
+    if (this.teamNameTaken(clean)) return { ok: false, error: 'Tên đội đã tồn tại.' };
+    const bad = this.validTeamColor(color);
+    if (bad) return { ok: false, error: bad };
+    this.teams.push({ id: newId(), name: clean, color });
+    // Players without a team who happened to have this colour get another one.
+    for (const p of this.players.values()) if (!p.teamId && p.color === color) p.color = this.freeColor();
+    this.changed();
+    return { ok: true };
+  }
+
+  updateTeam(teamId: string, name?: string, color?: number): Ack {
+    const t = this.teams.find((x) => x.id === teamId);
+    if (!t) return { ok: false, error: 'Không tìm thấy đội.' };
+    if (name !== undefined) {
+      const clean = this.cleanTeamName(name);
+      if (!clean) return { ok: false, error: 'Nhập tên đội.' };
+      if (this.teamNameTaken(clean, t.id)) return { ok: false, error: 'Tên đội đã tồn tại.' };
+      t.name = clean;
+    }
+    if (color !== undefined) {
+      const bad = this.validTeamColor(color, t.id);
+      if (bad) return { ok: false, error: bad };
+      t.color = color;
+      for (const p of this.players.values()) if (!p.teamId && p.color === color) p.color = this.freeColor();
+    }
+    this.changed();
+    return { ok: true };
+  }
+
+  deleteTeam(teamId: string): Ack {
+    if (!this.teamsOpen) return { ok: false, error: 'Chỉ xoá đội khi đang ở sảnh chờ.' };
+    if (!this.teams.some((t) => t.id === teamId)) return { ok: false, error: 'Không tìm thấy đội.' };
+    this.teams = this.teams.filter((t) => t.id !== teamId);
+    for (const p of this.players.values()) {
+      if (p.teamId === teamId) {
+        p.teamId = null;
+        p.color = this.freeColor();
+      }
+    }
+    this.changed();
+    return { ok: true };
+  }
+
+  setTeam(playerId: string, teamId: string | null): Ack {
+    const p = this.players.get(playerId);
+    if (!p) return { ok: false, error: 'Không tìm thấy người chơi.' };
+    if (!this.teamsOpen) return { ok: false, error: 'Trò chơi đã bắt đầu, không đổi đội được nữa.' };
+    if (teamId === p.teamId) return { ok: true };
+    if (teamId === null) {
+      p.teamId = null;
+      p.color = this.freeColor();
+    } else {
+      const t = this.teams.find((x) => x.id === teamId);
+      if (!t) return { ok: false, error: 'Không tìm thấy đội.' };
+      const count = [...this.players.values()].filter((o) => o.teamId === t.id).length;
+      if (count >= MAX_TEAM_SIZE) return { ok: false, error: `Đội ${t.name} đã đủ ${MAX_TEAM_SIZE} người.` };
+      p.teamId = t.id;
+    }
+    this.changed();
+    return { ok: true };
+  }
+
+  /** Teams players may still pick (empty once the game has started). */
+  teamOptions(): TeamOption[] {
+    if (!this.teamsOpen) return [];
+    return this.teams.map((t) => ({
+      id: t.id,
+      name: t.name,
+      color: t.color,
+      count: [...this.players.values()].filter((p) => p.teamId === t.id).length,
+    }));
+  }
+
+  /** Teams with their average score, in creation order. */
+  private teamStats(): PublicTeam[] {
+    return this.teams.map((t) => {
+      const members = [...this.players.values()].filter((p) => p.teamId === t.id);
+      const score = members.length ? members.reduce((s, p) => s + p.score, 0) / members.length : 0;
+      return { id: t.id, name: t.name, color: t.color, score, memberIds: members.map((p) => p.id) };
+    });
+  }
+
+  /** Competition ranking of the teams that have members. */
+  private teamRanks(): Map<string, number> {
+    const list = this.teamStats().filter((t) => t.memberIds.length);
+    return new Map(list.map((t) => [t.id, 1 + list.filter((o) => o.score > t.score).length]));
   }
 
   // ───────────────────────── answering ─────────────────────────
@@ -264,7 +425,7 @@ export class Game {
         prevRank: before.get(p.id) ?? 0,
         playerId: p.id,
         name: p.name,
-        color: p.color,
+        color: this.colorOf(p),
         choice: a?.choice ?? null,
         timeMs: a?.timeMs ?? null,
         correct: !!a && q.correct.includes(a.choice),
@@ -316,6 +477,9 @@ export class Game {
         }
         this.finish();
         return { ok: true };
+      case 'teamfinal':
+        this.phase = 'final';
+        break;
       case 'final':
         return { ok: false, error: 'Trò chơi đã kết thúc.' };
     }
@@ -339,7 +503,8 @@ export class Game {
 
   private finish() {
     this.clearTimer();
-    this.phase = 'final';
+    // The team podium comes first, then the individual one.
+    this.phase = this.teamRanks().size ? 'teamfinal' : 'final';
     const ranks = this.ranks();
     if (this.started || this.adjustments.length) {
       this.db.startGame(this.gameId, this.setId ?? '', this.currentSet?.title ?? '');
@@ -455,10 +620,11 @@ export class Game {
     return [...this.players.values()].map((p) => ({
       id: p.id,
       name: p.name,
-      color: p.color,
+      color: this.colorOf(p),
       score: p.score,
       connected: !!p.socketId,
       manual: p.manual,
+      teamId: this.teamOf(p)?.id ?? null,
     }));
   }
 
@@ -476,7 +642,7 @@ export class Game {
       .slice(0, 40)
       .flatMap(([id, a]) => {
         const p = this.players.get(id);
-        return p ? [{ playerId: id, name: p.name, color: p.color, timeMs: a.timeMs }] : [];
+        return p ? [{ playerId: id, name: p.name, color: this.colorOf(p), timeMs: a.timeMs }] : [];
       });
 
     let round = this.round;
@@ -487,7 +653,7 @@ export class Game {
         .filter((r) => this.players.has(r.playerId))
         .map((r) => {
           const p = this.players.get(r.playerId)!;
-          return { ...r, name: p.name, color: p.color, score: p.score, rank: ranks.get(p.id) ?? r.rank };
+          return { ...r, name: p.name, color: this.colorOf(p), score: p.score, rank: ranks.get(p.id) ?? r.rank };
         })
         .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'vi'));
       round = { ...round, rows };
@@ -496,6 +662,7 @@ export class Game {
     return {
       phase: this.phase,
       players: this.publicPlayers(),
+      teams: this.teamStats(),
       questionSets: this.sets.map(setInfo),
       setId: this.setId,
       setTitle: this.currentSet?.title ?? '',
@@ -519,6 +686,7 @@ export class Game {
       adjustments: this.adjustments.slice(0, 50),
       joinUrls: this.joinUrls,
       joinUrl: this.joinUrl,
+      lanWarning: this.lanWarning,
       restored: this.restored,
     };
   }
@@ -531,9 +699,23 @@ export class Game {
     const a = this.answers.get(p.id);
     const row = this.round?.rows.find((r) => r.playerId === p.id);
     const showResult = row && (this.phase === 'reveal' || this.phase === 'race' || this.phase === 'leaderboard');
+    const team = this.teamOf(p);
+    const teamRanks = this.teamRanks();
+    const teamStat = team && this.teamStats().find((t) => t.id === team.id);
     return {
       phase: this.phase,
-      me: { id: p.id, name: p.name, color: p.color, score: p.score, rank: this.ranks().get(p.id) ?? 0, total: this.players.size },
+      me: {
+        id: p.id,
+        name: p.name,
+        color: this.colorOf(p),
+        score: p.score,
+        rank: this.ranks().get(p.id) ?? 0,
+        total: this.players.size,
+        teamId: team?.id ?? null,
+      },
+      myTeam: teamStat
+        ? { name: teamStat.name, color: teamStat.color, score: teamStat.score, rank: teamRanks.get(teamStat.id) ?? 0, total: teamRanks.size }
+        : null,
       question: q && timed ? { index: this.qIndex, total: this.questions.length, answerCount: q.answers.length, remainingMs: this.remaining() ?? 0 } : null,
       myAnswer: a && this.phase === 'question' ? { choice: a.choice, timeMs: a.timeMs } : null,
       result: showResult
@@ -555,16 +737,28 @@ export class Game {
     const adj = this.db.adjustmentsFor(this.gameId);
     const qCount = Math.max(this.questions.length, ...answers.map((a) => a.question_index + 1), 0);
     const ranks = this.ranks();
-    const header = ['Hạng', 'Người chơi', ...Array.from({ length: qCount }, (_, i) => `Câu ${i + 1}`), 'Chấm tay', 'Tổng điểm'];
-    const rows = [...this.players.values()]
+    const hasTeams = this.teams.length > 0;
+    const header = [
+      'Hạng', 'Người chơi', ...(hasTeams ? ['Đội'] : []),
+      ...Array.from({ length: qCount }, (_, i) => `Câu ${i + 1}`), 'Chấm tay', 'Tổng điểm',
+    ];
+    const rows: (string | number)[][] = [...this.players.values()]
       .sort((a, b) => b.score - a.score)
       .map((p) => {
         const per = Array.from({ length: qCount }, (_, i) =>
           answers.filter((a) => a.player_id === p.id && a.question_index === i).reduce((s, a) => s + a.points, 0),
         );
         const manual = adj.filter((a) => a.player_id === p.id).reduce((s, a) => s + a.delta, 0);
-        return [ranks.get(p.id) ?? 0, p.name, ...per, manual, p.score];
+        return [ranks.get(p.id) ?? 0, p.name, ...(hasTeams ? [this.teamOf(p)?.name ?? ''] : []), ...per, manual, p.score];
       });
+    if (hasTeams) {
+      const teamRanks = this.teamRanks();
+      rows.push([], ['Hạng đội', 'Đội', 'Thành viên', 'Điểm đội (trung bình)']);
+      for (const t of this.teamStats().filter((x) => x.memberIds.length).sort((a, b) => b.score - a.score)) {
+        const names = t.memberIds.map((id) => this.players.get(id)!.name).join(' · ');
+        rows.push([teamRanks.get(t.id) ?? 0, t.name, names, Math.round(t.score)]);
+      }
+    }
     return { header, rows };
   }
 
@@ -587,6 +781,7 @@ export class Game {
           qIndex: this.qIndex,
           phase: this.phase,
           players: [...this.players.values()].map((p) => ({ ...p, socketId: null })),
+          teams: this.teams,
           round: this.round,
           adjustments: this.adjustments,
         }),
@@ -601,13 +796,16 @@ export class Game {
     if (!json) return false;
     try {
       const s = JSON.parse(json);
-      if (s.v !== 1 || (!s.players?.length && !s.started)) return false;
+      if (s.v !== 1) return false;
+      // Teams are host setup: keep them even when there is no game worth restoring.
+      this.teams = s.teams ?? [];
+      if (!s.players?.length && !s.started) return false;
       this.gameId = s.gameId;
       this.started = s.started;
       if (s.setId) this.setId = s.setId;
       this.questions = s.questions ?? [];
       this.qIndex = s.qIndex ?? -1;
-      this.players = new Map((s.players as Player[]).map((p) => [p.id, { ...p, socketId: null }]));
+      this.players = new Map((s.players as Player[]).map((p) => [p.id, { ...p, teamId: p.teamId ?? null, socketId: null }]));
       this.round = s.round ?? null;
       this.adjustments = s.adjustments ?? [];
       this.phase = s.phase;

@@ -1,6 +1,7 @@
 // Endless horse-race track. Each player has a lane; the camera pans and zooms
 // so that every horse (from the last one to the leader) is always on screen.
-import type { PublicPlayer } from '../../shared/types';
+// Team mates race in neighbouring lanes.
+import type { PublicPlayer, PublicTeam } from '../../shared/types';
 import { esc, fmtPoints } from '../common/dom';
 import { horseSvg, playerColor } from '../common/horse';
 import { sfx } from '../common/sound';
@@ -12,6 +13,7 @@ interface Runner {
   scoreEl: HTMLElement;
   rankEl: HTMLElement;
   nameEl: HTMLElement;
+  teamEl: HTMLElement;
   color: number;
   pos: number;
   from: number;
@@ -64,7 +66,7 @@ export class RaceTrack {
   }
 
   /** Sync players. With animate=true horses gallop from where they are to their new score. */
-  update(players: PublicPlayer[], animate: boolean, startFrom?: Map<string, number>) {
+  update(players: PublicPlayer[], teams: PublicTeam[], animate: boolean, startFrom?: Map<string, number>) {
     const seen = new Set<string>();
     for (const p of players) {
       seen.add(p.id);
@@ -93,6 +95,7 @@ export class RaceTrack {
     }
     const list = [...players];
     this.ranks = new Map(list.map((p) => [p.id, 1 + list.filter((o) => o.score > p.score).length]));
+    this.arrange(players, teams);
     this.measure();
 
     const moving = animate && [...this.runners.values()].some((r) => r.to !== r.from);
@@ -111,12 +114,34 @@ export class RaceTrack {
     this.raf = requestAnimationFrame((t) => this.frame(t));
   }
 
+  /** Lane order: teams in creation order (members side by side), then players without a team. */
+  private arrange(players: PublicPlayer[], teams: PublicTeam[]) {
+    const teamIdx = new Map(teams.map((t, i) => [t.id, i]));
+    const group = (p: PublicPlayer) => (p.teamId ? teamIdx.get(p.teamId) ?? teams.length : teams.length);
+    const order = players
+      .map((p, i) => ({ p, i }))
+      .sort((a, b) => group(a.p) - group(b.p) || a.i - b.i)
+      .map(({ p }) => p);
+    order.forEach((p, i) => {
+      const r = this.runners.get(p.id)!;
+      const team = p.teamId ? teams.find((t) => t.id === p.teamId) : undefined;
+      const first = !!team && order[i - 1]?.teamId !== p.teamId;
+      r.row.classList.toggle('team-first', first);
+      r.row.classList.toggle('team-last', !!team && order[i + 1]?.teamId !== p.teamId);
+      r.teamEl.textContent = first ? team!.name : '';
+    });
+    const rows = [...this.inner.querySelectorAll<HTMLElement>(':scope > .race-row')];
+    if (order.some((p, i) => rows[i] !== this.runners.get(p.id)!.row)) {
+      for (const p of order) this.inner.appendChild(this.runners.get(p.id)!.row);
+    }
+  }
+
   private createRunner(p: PublicPlayer, pos: number): Runner {
     const row = document.createElement('div');
     row.className = 'race-row';
     row.style.setProperty('--pc', playerColor(p.color));
     row.innerHTML = `
-      <div class="rl"><span class="rl-rank">–</span><span class="rl-name">${esc(p.name)}</span><span class="rl-score">0</span></div>
+      <div class="rl"><span class="rl-team"></span><span class="rl-rank">–</span><span class="rl-name">${esc(p.name)}</span><span class="rl-score">0</span></div>
       <div class="lane"><div class="runner">${horseSvg(p.color)}<span class="crown">👑</span></div></div>`;
     this.inner.appendChild(row);
     return {
@@ -126,6 +151,7 @@ export class RaceTrack {
       scoreEl: row.querySelector('.rl-score')!,
       rankEl: row.querySelector('.rl-rank')!,
       nameEl: row.querySelector('.rl-name')!,
+      teamEl: row.querySelector('.rl-team')!,
       color: p.color,
       pos,
       from: pos,

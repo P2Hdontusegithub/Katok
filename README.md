@@ -145,11 +145,32 @@ Cách này cần đưa server ra Internet bằng một *đường hầm* (tunnel
 
 Lần đầu chạy, Windows sẽ hỏi *"Allow Node.js to communicate on these networks"*. Hãy **tích cả Private và Public** rồi bấm **Allow access**.
 
-Nếu lỡ bấm *Cancel*, hoặc điện thoại không vào được dù chung mạng:
+**Dấu hiệu:** điện thoại mở link `http://192.168.x.x:3000` thì trang không tải được, nhưng dùng tunnel (cách C) lại vào được. Từ v1.1, Ka-tok tự kiểm tra tường lửa khi khởi động và in cảnh báo trong terminal, đồng thời hiện dòng chữ đỏ dưới mã QR ở sảnh chờ.
+
+**Cách sửa nhanh:** mở **PowerShell** bằng *Run as administrator* rồi chạy lệnh dưới đây (đổi `3000` nếu bạn đã đổi `port`):
+
+```bash
+netsh advfirewall firewall add rule name="Ka-tok" dir=in action=allow protocol=TCP localport=3000 profile=any
+```
+
+Hoặc làm thủ công, nếu lỡ bấm *Cancel* hay điện thoại không vào được dù chung mạng:
 
 1. Mở **Windows Security → Firewall & network protection → Allow an app through firewall**.
 2. Bấm **Change settings**, tìm **Node.js JavaScript Runtime** và tích cả hai cột **Private** và **Public**.
 3. Nên đặt mạng Wi-Fi đang dùng là **Private**: *Settings → Network & Internet → Wi-Fi → (tên mạng) → Network profile type → Private*.
+
+#### Máy có phần mềm diệt virus kèm tường lửa (Symantec, Kaspersky, ESET, Norton, Bitdefender…)
+
+Các phần mềm này **thay thế** tường lửa Windows. Khi đó, mọi luật bạn thêm trong Windows (lệnh `netsh` ở trên, *Allow an app…*) đều **không có tác dụng**. Từ v1.1, Ka-tok tự phát hiện trường hợp này và ghi rõ tên phần mềm trong cảnh báo.
+
+Hãy thêm luật ngay trong phần mềm đó: cho phép kết nối **chiều vào (incoming)**, giao thức **TCP**, **cổng cục bộ 3000**. Ví dụ với **Symantec Endpoint Protection**:
+
+1. Mở Symantec Endpoint Protection (biểu tượng ở khay hệ thống).
+2. Chọn **Change Settings**. Ở mục **Network and Host Exploit Mitigation** (bản cũ ghi *Network Threat Protection*), bấm **Configure Settings / Options**, rồi chọn **Configure Firewall Rules**.
+3. Bấm **Add**, đặt tên `Ka-tok`, chọn **Allow this traffic**. Ở thẻ **Ports and Protocols**, chọn **TCP**, **Local ports** = `3000`, **Traffic direction** = **Incoming**. Bấm **OK**.
+4. Di chuyển luật vừa tạo lên **đầu danh sách** (luật ở trên được ưu tiên), rồi bấm **OK** để lưu.
+
+Tên mục có thể khác đôi chút giữa các phiên bản. Nếu máy do công ty quản lý, thường bạn không sửa được luật; khi đó hãy nhờ IT hoặc dùng **tunnel** (cách C).
 
 Trên **macOS**, nếu hệ thống hỏi *"Do you want the application node to accept incoming network connections?"*, hãy chọn **Allow**.
 
@@ -267,7 +288,10 @@ Mỗi câu hỏi đi qua các màn hình theo thứ tự sau. Bấm nút lớn �
 | **Đáp án** | Đáp án đúng, biểu đồ số người chọn từng đáp án, top 3 nhanh nhất | Đường đua 🏇 |
 | **Đường đua** | Ngựa phi lên theo số điểm vừa được cộng, camera tự co giãn | Bảng điểm 📋 |
 | **Bảng kết quả** | Cột *Thứ tự, Người chơi, Đáp án, Thời gian, Điểm lượt này, Tổng điểm*, kèm mũi tên tăng/giảm hạng và ⚡ cho người nhanh nhất | Câu tiếp ▶ |
+| **Chung cuộc – Đồng đội** *(chỉ khi có đội)* | Bục top 3 đội, cả đội cùng đứng trên một bục | Bục cá nhân 🏅 |
 | **Chung cuộc** | Bục vinh quang top 3, pháo giấy và nhạc, danh sách các hạng sau | Xuất CSV / Ván mới / Về sảnh |
+
+**Chơi theo đội (tùy chọn):** ở sảnh chờ, host nhập tên đội ngắn (tối đa 12 ký tự), chọn màu rồi bấm **＋ Tạo đội**. Mỗi đội tối đa **3 người**; mọi con ngựa trong đội mang màu của đội. Khi đã có đội còn chỗ, người chơi phải chọn đội lúc vào phòng (và có thể đổi đội cho tới khi bắt đầu). Trên thẻ đội, bấm vào tên để đổi tên, chấm tròn để đổi màu, ✕ để xóa đội. Host cũng có thể chuyển đội cho người chơi trong màn hình chấm tay ✍️ khi đang ở sảnh. **Điểm đội = tổng điểm các thành viên ÷ số thành viên.** Trên đường đua, các thành viên cùng đội chạy ở các làn sát nhau. Không tạo đội thì trò chơi chạy như cũ.
 
 **Thanh công cụ phía trên:**
 

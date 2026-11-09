@@ -1,5 +1,5 @@
-import type { HostAction, HostState, PublicPlayer, RoundRow } from '../../shared/types';
-import { ANSWER_LETTERS } from '../../shared/types';
+import type { HostAction, HostState, PublicPlayer, PublicTeam, RoundRow } from '../../shared/types';
+import { ANSWER_LETTERS, MAX_TEAM_SIZE, PLAYER_COLORS } from '../../shared/types';
 import { countTo, esc, fmtPoints, fmtTime } from '../common/dom';
 import { horseSvg, playerColor } from '../common/horse';
 import { ANSWER_COLORS, ANSWER_NAMES, shapeSvg } from '../common/shapes';
@@ -29,6 +29,7 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
         <img class="qr" alt="Mã QR tham gia" />
         <div class="join-hint">hoặc quét mã QR 📱</div>
         <select class="url-select" title="Chọn địa chỉ mạng hiển thị"></select>
+        <div class="lan-warning" hidden></div>
       </aside>
       <section class="lobby-main">
         <div class="lobby-logo"><h1 class="logo big">Ka<span>-</span>tok</h1><span class="logo-horse">${horseSvg(3, 'running')}</span></div>
@@ -38,22 +39,116 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
           <button class="btn small ghost reload" title="Đọc lại các file JSON trong thư mục questions/">⟳ Tải lại</button>
         </div>
         <div class="set-errors"></div>
-        <div class="lobby-count"><b>0</b> người chơi đã vào</div>
-        <div class="bubbles"></div>
-        <div class="lobby-empty">Đang chờ người chơi… 🐴</div>
+        <form class="team-form" autocomplete="off">
+          <label>Đội</label>
+          <input name="name" maxlength="12" placeholder="Tên đội (ngắn)" />
+          <div class="swatches"></div>
+          <button class="btn small">＋ Tạo đội</button>
+        </form>
+        <div class="lobby-count"><b>0</b> người chơi đã vào<span class="team-count"></span></div>
+        <div class="lobby-players">
+          <div class="teams"></div>
+          <div class="solo-label" hidden>Chưa chọn đội</div>
+          <div class="bubbles"></div>
+          <div class="lobby-empty">Đang chờ người chơi… 🐴</div>
+        </div>
       </section>
     </div>`;
   const urlEl = stage.querySelector<HTMLElement>('.join-url')!;
   const qr = stage.querySelector<HTMLImageElement>('.qr')!;
   const urlSel = stage.querySelector<HTMLSelectElement>('.url-select')!;
+  const lanWarn = stage.querySelector<HTMLElement>('.lan-warning')!;
   const setSel = stage.querySelector<HTMLSelectElement>('.set-select')!;
   const errors = stage.querySelector<HTMLElement>('.set-errors')!;
   const countEl = stage.querySelector<HTMLElement>('.lobby-count b')!;
+  const teamCountEl = stage.querySelector<HTMLElement>('.team-count')!;
+  const teamForm = stage.querySelector<HTMLFormElement>('.team-form')!;
+  const swatches = stage.querySelector<HTMLElement>('.swatches')!;
+  const teamsEl = stage.querySelector<HTMLElement>('.teams')!;
+  const soloLabel = stage.querySelector<HTMLElement>('.solo-label')!;
   const bubbles = stage.querySelector<HTMLElement>('.bubbles')!;
   const empty = stage.querySelector<HTMLElement>('.lobby-empty')!;
   const known = new Map<string, HTMLElement>();
+  const seen = new Set<string>();
   let first = true;
   let current = s;
+  let pickColor = -1;
+  let teamsSig = '';
+
+  const freeColors = (exceptTeam?: string) => {
+    const taken = new Set(current.teams.filter((t) => t.id !== exceptTeam).map((t) => t.color));
+    return PLAYER_COLORS.map((_, i) => i).filter((i) => !taken.has(i));
+  };
+
+  teamForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const input = teamForm.elements.namedItem('name') as HTMLInputElement;
+    if (await ctx.send({ type: 'createTeam', name: input.value, color: pickColor })) {
+      input.value = '';
+      pickColor = -1;
+    }
+  };
+  swatches.onclick = (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('.sw');
+    if (!b || b.disabled) return;
+    pickColor = Number(b.dataset.c);
+    renderSwatches();
+  };
+  const renderSwatches = () => {
+    const free = freeColors();
+    if (!free.includes(pickColor)) pickColor = free[0] ?? -1;
+    swatches.innerHTML = PLAYER_COLORS.map(
+      (c, i) => `<button type="button" class="sw ${i === pickColor ? 'on' : ''}" data-c="${i}" style="--pc:${c}" ${free.includes(i) ? '' : 'disabled'} title="Chọn màu đội"></button>`,
+    ).join('');
+  };
+  teamsEl.onclick = (e) => {
+    const el = e.target as HTMLElement;
+    const card = el.closest<HTMLElement>('.team-card');
+    const team = current.teams.find((t) => t.id === card?.dataset.id);
+    if (!team) return;
+    if (el.closest('.tc-del')) {
+      if (confirm(`Xoá đội "${team.name}"? Thành viên sẽ chơi cá nhân.`)) ctx.send({ type: 'deleteTeam', teamId: team.id });
+    } else if (el.closest('.tc-color')) {
+      // Cycle to the next colour no other team uses.
+      const free = freeColors(team.id);
+      const next = free.find((c) => c > team.color) ?? free[0];
+      if (next !== undefined && next !== team.color) ctx.send({ type: 'updateTeam', teamId: team.id, color: next });
+    } else if (el.closest('.tc-name')) {
+      const n = prompt('Tên đội mới:', team.name);
+      if (n) ctx.send({ type: 'updateTeam', teamId: team.id, name: n });
+    } else {
+      const m = el.closest<HTMLElement>('.member');
+      if (m && confirm(`Mời "${m.dataset.name}" ra khỏi phòng?`)) ctx.send({ type: 'kick', playerId: m.dataset.id! });
+    }
+  };
+
+  const renderTeams = (s: HostState) => {
+    const byId = new Map(s.players.map((p) => [p.id, p]));
+    const sig = JSON.stringify([s.teams.map((t) => [t.id, t.name, t.color, t.memberIds]), s.players.map((p) => [p.id, p.name, p.connected])]);
+    if (sig === teamsSig) return;
+    teamsSig = sig;
+    renderSwatches();
+    teamsEl.innerHTML = s.teams
+      .map((t) => {
+        const members = t.memberIds.map((id) => byId.get(id)!).filter(Boolean);
+        const slots = Array.from({ length: MAX_TEAM_SIZE }, (_, i) => {
+          const p = members[i];
+          return p
+            ? `<li class="member ${!p.connected && !p.manual ? 'offline' : ''}" data-id="${p.id}" data-name="${esc(p.name)}" title="${!p.connected && !p.manual ? 'Mất kết nối' : ''}">${horseSvg(t.color)}<span>${esc(p.name)}</span></li>`
+            : `<li class="slot">trống</li>`;
+        });
+        return `<div class="team-card ${members.length >= MAX_TEAM_SIZE ? 'full' : ''}" data-id="${t.id}" style="--pc:${playerColor(t.color)}">
+          <header>
+            <button class="tc-color" title="Đổi màu đội"></button>
+            <b class="tc-name" title="Bấm để đổi tên">${esc(t.name)}</b>
+            <span class="tc-count">${members.length}/${MAX_TEAM_SIZE}</span>
+            <button class="tc-del" title="Xoá đội">✕</button>
+          </header>
+          <ul>${slots.join('')}</ul>
+        </div>`;
+      })
+      .join('');
+  };
 
   urlSel.onchange = () => {
     if (urlSel.value === '__custom') {
@@ -73,6 +168,10 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
 
   const update = (s: HostState) => {
     current = s;
+    // Only relevant while the QR points to a LAN IP (a tunnel bypasses the firewall).
+    const lanUrl = /^https?:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(s.joinUrl);
+    lanWarn.hidden = !(s.lanWarning && lanUrl);
+    if (!lanWarn.hidden) lanWarn.textContent = `⚠️ ${s.lanWarning}`;
     const shown = s.joinUrl.replace(/^https?:\/\//, '');
     if (urlEl.textContent !== shown) {
       urlEl.textContent = shown;
@@ -88,8 +187,17 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
     errors.innerHTML = errs.length ? `<ul>${errs.slice(0, 6).join('')}${errs.length > 6 ? `<li>… và ${errs.length - 6} lỗi khác</li>` : ''}</ul>` : '';
 
     countEl.textContent = String(s.players.length);
+    teamCountEl.textContent = s.teams.length ? ` · ${s.teams.length} đội` : '';
     empty.hidden = s.players.length > 0;
-    const ids = new Set(s.players.map((p) => p.id));
+    renderTeams(s);
+    for (const p of s.players) {
+      if (!seen.has(p.id) && !first) sfx.pop();
+      seen.add(p.id);
+    }
+    // Bubbles only for players without a team; team members are shown in their team card.
+    const solo = s.players.filter((p) => !p.teamId);
+    soloLabel.hidden = !s.teams.length || !solo.length;
+    const ids = new Set(solo.map((p) => p.id));
     for (const [id, el] of known) {
       if (!ids.has(id)) {
         el.classList.add('leaving');
@@ -97,7 +205,7 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
         known.delete(id);
       }
     }
-    for (const p of s.players) {
+    for (const p of solo) {
       let el = known.get(p.id);
       if (!el) {
         el = document.createElement('div');
@@ -105,7 +213,6 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
         el.dataset.id = p.id;
         bubbles.appendChild(el);
         known.set(p.id, el);
-        if (!first) sfx.pop();
       }
       if (el.dataset.sig !== `${p.name}|${p.color}`) {
         el.dataset.sig = `${p.name}|${p.color}`;
@@ -113,7 +220,9 @@ export function lobbyView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
         el.style.setProperty('--pc', playerColor(p.color));
         el.innerHTML = `${horseSvg(p.color)}<span>${esc(p.name)}</span>`;
       }
-      el.classList.toggle('offline', !p.connected && !p.manual);
+      const offline = !p.connected && !p.manual;
+      el.classList.toggle('offline', offline);
+      el.title = offline ? 'Mất kết nối' : '';
     }
     first = false;
   };
@@ -274,7 +383,7 @@ export function raceView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
   const update = (s: HostState) => {
     small.textContent = s.question ? `sau câu ${s.question.index + 1} / ${s.question.total}` : s.setTitle;
     const startFrom = new Map((s.round?.rows ?? []).map((r) => [r.playerId, r.score - r.gained]));
-    ctx.track.update(s.players, true, startFrom);
+    ctx.track.update(s.players, s.teams, true, startFrom);
   };
   update(s);
   return { update };
@@ -342,6 +451,43 @@ export function boardView(stage: HTMLElement, s: HostState): View {
 
 // ───────────────────────── Final ─────────────────────────
 
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+/** Team podium (shown before the individual one): the whole team stands on its block. */
+export function teamFinalView(stage: HTMLElement, s: HostState): View {
+  stage.innerHTML = `
+    <div class="final team-final">
+      <h1 class="final-title slide-up">🏆 Đồng đội 🏆</h1>
+      <div class="podium"></div>
+      <ol class="rest"></ol>
+    </div>`;
+  const podium = stage.querySelector<HTMLElement>('.podium')!;
+  const rest = stage.querySelector<HTMLElement>('.rest')!;
+  const update = (s: HostState) => {
+    const byId = new Map(s.players.map((p) => [p.id, p]));
+    const names = (t: PublicTeam) => t.memberIds.map((id) => esc(byId.get(id)?.name ?? '')).join(' · ');
+    const sorted = s.teams.filter((t) => t.memberIds.length).sort((a, b) => b.score - a.score);
+    const rankOf = (t: PublicTeam) => 1 + sorted.filter((o) => o.score > t.score).length;
+    const spot = (t: PublicTeam | undefined, place: number) =>
+      t
+        ? `<div class="spot p${place}" style="--pc:${playerColor(t.color)}">
+            <div class="spot-horses">${t.memberIds.map(() => `<div class="spot-horse">${horseSvg(t.color, place === 1 ? 'running' : '')}</div>`).join('')}</div>
+            <div class="spot-name">${esc(t.name)}</div>
+            <div class="spot-members">${names(t)}</div>
+            <div class="spot-score">${fmtPoints(t.score)}</div>
+            <div class="spot-block"><span>${MEDALS[place - 1]}</span></div>
+          </div>`
+        : `<div class="spot p${place} empty"><div class="spot-block"></div></div>`;
+    podium.innerHTML = spot(sorted[1], 2) + spot(sorted[0], 1) + spot(sorted[2], 3);
+    rest.innerHTML = sorted
+      .slice(3, 15)
+      .map((t) => `<li style="--pc:${playerColor(t.color)}"><b>${rankOf(t)}</b><i class="dot"></i><span>${esc(t.name)} <small>${names(t)}</small></span><em>${fmtPoints(t.score)}</em></li>`)
+      .join('');
+  };
+  update(s);
+  return { update };
+}
+
 export function finalView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
   stage.innerHTML = `
     <div class="final">
@@ -371,7 +517,7 @@ export function finalView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
             <div class="spot-horse">${horseSvg(p.color, place === 1 ? 'running' : '')}</div>
             <div class="spot-name">${esc(p.name)}</div>
             <div class="spot-score">${fmtPoints(p.score)}</div>
-            <div class="spot-block"><span>${['🥇', '🥈', '🥉'][place - 1]}</span></div>
+            <div class="spot-block"><span>${MEDALS[place - 1]}</span></div>
           </div>`
         : `<div class="spot p${place} empty"><div class="spot-block"></div></div>`;
     podium.innerHTML = spot(sorted[1], 2) + spot(sorted[0], 1) + spot(sorted[2], 3);

@@ -2,3 +2,9 @@ node_modules/
 dist/
 public/js/
 data/
+questions/
+
+# Bỏ qua mọi thứ trong ideas/ trừ file mô tả ban đầu.
+# Phải dùng "ideas/*" (không phải "ideas/"): nếu ignore cả thư mục thì dòng "!" bên dưới không có tác dụng.
+ideas/*
+!ideas/Mo-ta-katok.txt

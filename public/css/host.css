@@ -9,6 +9,7 @@ body.host { overflow: hidden; }
 .topbar {
   height: 56px; flex: none; display: flex; align-items: center; justify-content: space-between;
   padding: 0 16px; gap: 12px; background: rgba(20, 0, 50, 0.25); backdrop-filter: blur(6px);
+  position: relative; z-index: 50; /* backdrop-filter tạo stacking context → phải nâng cả topbar để .menu nổi trên .stage */
 }
 .bar-left, .bar-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .bar-logo { font-weight: 800; font-size: 1.5rem; margin-right: 6px; }
@@ -41,6 +42,7 @@ body.host { overflow: hidden; }
 .join-url { font-weight: 800; font-size: clamp(1.4rem, 2.4vw, 2.6rem); color: var(--bg-2); word-break: break-all; line-height: 1.1; }
 .qr { width: min(100%, 38vh); aspect-ratio: 1; border-radius: 16px; background: #fff; image-rendering: pixelated; }
 .join-hint { font-weight: 700; color: var(--ink-soft); }
+.lan-warning { background: #fff3f4; color: #a3122a; border-radius: 12px; padding: 8px 12px; font-weight: 700; font-size: 0.85rem; line-height: 1.3; text-align: left; }
 .url-select { font-size: 0.9rem; padding: 6px 10px; border-width: 2px; max-width: 100%; }
 .lobby-main { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 .lobby-logo { display: flex; align-items: center; gap: 16px; }
@@ -51,7 +53,32 @@ body.host { overflow: hidden; }
 .set-errors ul { margin: 0; padding: 10px 14px 10px 32px; background: #fff3f4; color: #a3122a; border-radius: 14px; font-weight: 600; font-size: 0.95rem; }
 .lobby-count { font-size: 1.6rem; font-weight: 700; }
 .lobby-count b { font-size: 2.6rem; color: var(--yellow); margin-right: 4px; }
-.bubbles { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 12px; padding: 4px 4px 90px; }
+.team-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: rgba(255, 255, 255, 0.12); padding: 10px 14px; border-radius: 16px; }
+.team-form label { font-weight: 800; }
+.team-form input { width: 170px; padding: 6px 12px; font-size: 1rem; }
+.swatches { display: flex; flex-wrap: wrap; gap: 5px; }
+.sw { width: 24px; height: 24px; border-radius: 50%; border: 3px solid transparent; background: var(--pc); cursor: pointer; padding: 0; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); }
+.sw.on { border-color: #fff; transform: scale(1.18); }
+.sw:disabled { opacity: 0.2; cursor: default; box-shadow: none; }
+.lobby-players { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 4px 90px; }
+.teams { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.teams:empty { display: none; }
+.team-card { background: #fff; color: var(--ink); border-radius: 18px; overflow: hidden; box-shadow: 0 5px 0 var(--pc); animation: popIn 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+.team-card header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--pc); color: #fff; }
+.tc-color { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff; background: var(--pc); cursor: pointer; flex: none; padding: 0; }
+.tc-name { flex: 1; min-width: 0; font-size: 1.3rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); }
+.tc-count { background: rgba(0, 0, 0, 0.22); padding: 0 10px; border-radius: 999px; font-weight: 800; }
+.team-card.full .tc-count { background: #fff; color: var(--ink); }
+.tc-del { border: 0; background: rgba(0, 0, 0, 0.18); color: #fff; width: 26px; height: 26px; border-radius: 8px; cursor: pointer; font-weight: 800; }
+.team-card ul { list-style: none; margin: 0; padding: 6px 10px; display: grid; gap: 2px; }
+.team-card li { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: clamp(0.95rem, 1.3vw, 1.25rem); min-height: 34px; }
+.team-card li .horse { width: 44px; flex: none; }
+.team-card li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-card li.member { cursor: pointer; animation: popIn 0.4s both; }
+.team-card li.offline { background: #e9e4f0; color: #9d93b0; border-radius: 10px; padding-right: 8px; }
+.team-card li.slot { color: #c8bddb; font-weight: 700; border: 2px dashed #e6ddf3; border-radius: 10px; padding-left: 12px; }
+.solo-label { font-weight: 800; opacity: 0.8; }
+.bubbles { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 12px; }
 .bubble {
   display: inline-flex; align-items: center; gap: 8px; background: #fff; color: var(--ink);
   padding: 6px 18px 6px 8px; border-radius: 999px; font-weight: 800; font-size: clamp(1rem, 1.5vw, 1.5rem);
@@ -60,7 +87,10 @@ body.host { overflow: hidden; }
 }
 .bubble:hover { transform: translateY(-2px) rotate(-1deg); }
 .bubble .horse { width: 52px; }
-.bubble.offline { opacity: 0.5; }
+/* Offline players: grey card, faded name, grey horse and a "no signal" badge so they are easy to spot. */
+.bubble.offline { background: #d9d3e3; color: #8a7fa0; box-shadow: 0 4px 0 #a99fba; }
+.bubble.offline .horse, .team-card li.offline .horse { filter: grayscale(1) opacity(0.55); }
+.bubble.offline::after, .team-card li.offline::after { content: '📵'; font-size: 0.85em; margin-left: auto; }
 .bubble.leaving { transform: scale(0.3); opacity: 0; }
 .lobby-empty { font-size: 1.5rem; font-weight: 700; opacity: 0.8; animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.45; } }
@@ -172,6 +202,14 @@ body.host { overflow: hidden; }
 .rl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rl-score { color: var(--bg-2); font-variant-numeric: tabular-nums; }
 .race-row.offline .rl { opacity: 0.6; }
+/* Team mates sit in neighbouring lanes; a gap of grass separates the groups. */
+.race-row.team-first { margin-top: 5px; }
+.race-row.team-last { margin-bottom: 5px; }
+.rl-team:empty { display: none; }
+.rl-team {
+  position: absolute; left: 4px; top: 0; transform: translateY(-55%); z-index: 5; background: var(--pc); color: #fff;
+  font-size: 0.62em; line-height: 1.3; padding: 0 8px; border-radius: 6px; white-space: nowrap; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+}
 .lane {
   flex: 1; position: relative; background-color: #d49b65;
   background-image: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.12) 0 4px, transparent 4px 120px),
@@ -246,6 +284,11 @@ body.host { overflow: hidden; }
 .spot.p3 .spot-block { animation-delay: 0s; }
 @keyframes rise { from { transform: scaleY(0); } }
 @keyframes dropIn { from { transform: translateY(-60px); opacity: 0; } }
+/* Team podium: the members stand together on one block. */
+.spot-horses { display: flex; justify-content: center; align-items: flex-end; width: 100%; }
+.spot-horses .spot-horse { width: clamp(64px, 7vw, 120px); margin: 0 -6px; animation-delay: inherit; }
+.spot-members { font-weight: 700; font-size: clamp(0.85rem, 1.2vw, 1.1rem); opacity: 0.9; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: popIn 0.6s both; }
+.team-final .rest li small { opacity: 0.75; font-weight: 600; }
 .rest { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; width: min(1000px, 100%); }
 .rest li { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.14); padding: 6px 14px; border-radius: 12px; font-weight: 700; animation: slideUp 0.5s 2s both; }
 .rest li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -274,6 +317,7 @@ body.host { overflow: hidden; }
 .manual-table input.delta { width: 110px; }
 .m-name { border-left: 6px solid var(--pc); }
 .m-name small { opacity: 0.7; }
+.manual-table .team-sel { width: auto; margin-left: 8px; padding: 2px 8px; font-size: 0.9rem; border-width: 2px; }
 .dot.on { background: var(--green); }
 .dot.off { background: #c8bddb; }
 .dot.manual { background: var(--orange); }

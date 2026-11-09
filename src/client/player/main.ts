@@ -1,5 +1,5 @@
-import type { PlayerState } from '../../shared/types';
-import { ANSWER_LETTERS } from '../../shared/types';
+import type { PlayerState, TeamOption } from '../../shared/types';
+import { ANSWER_LETTERS, MAX_TEAM_SIZE } from '../../shared/types';
 import { $, decorateBackground, esc, fmtPoints, fmtTime, toast } from '../common/dom';
 import { horseSvg, playerColor } from '../common/horse';
 import { call, connect, connectionBanner } from '../common/net';
@@ -26,12 +26,58 @@ let questionSeenIndex = -1;
 let pendingChoice: number | null = null;
 let timerRaf = 0;
 let lastResultKey = '';
+/** Teams that can still be picked (empty when there are none or the game has started). */
+let teams: TeamOption[] = [];
+let joinTeam: string | null = null;
+
+// ───────────────────────── teams ─────────────────────────
+
+function teamButtons(selected: string | null) {
+  return teams
+    .map((t) => {
+      const full = t.count >= MAX_TEAM_SIZE && t.id !== selected;
+      return `<button type="button" class="team-btn ${t.id === selected ? 'on' : ''}" data-team="${t.id}" style="--pc:${playerColor(t.color)}" ${full ? 'disabled' : ''}>
+        <i class="dot"></i><span>${esc(t.name)}</span><small>${full ? 'Đủ người' : `${t.count}/${MAX_TEAM_SIZE}`}</small></button>`;
+    })
+    .join('');
+}
+
+const joinTeams = $('#join-teams');
+function renderJoinTeams() {
+  const open = teams.filter((t) => t.count < MAX_TEAM_SIZE);
+  if (!open.some((t) => t.id === joinTeam)) joinTeam = null;
+  joinTeams.hidden = !open.length;
+  joinTeams.innerHTML = `<div class="team-pick-title">Chọn đội của bạn</div>${teamButtons(joinTeam)}`;
+}
+joinTeams.onclick = (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>('.team-btn');
+  if (!b || b.disabled) return;
+  joinTeam = b.dataset.team!;
+  renderJoinTeams();
+};
+
+socket.on('teams', (list: TeamOption[]) => {
+  teams = list;
+  renderJoinTeams();
+  if (state?.phase !== 'lobby') return;
+  const pick = document.getElementById('lobby-teams');
+  if (pick && teams.length) {
+    pick.innerHTML = pick.firstElementChild!.outerHTML + teamButtons(state.me.teamId);
+  } else {
+    screenKey = '';
+    render(state);
+  }
+});
 
 // ───────────────────────── joining ─────────────────────────
 
 async function join(name?: string) {
   const token = localStorage.getItem(TOKEN_KEY) ?? undefined;
-  const r = await call<{ ok: boolean; error?: string; token?: string }>(socket, 'player:join', { name, token });
+  if (name !== undefined && !joinTeams.hidden && !joinTeam) {
+    $('#join-error').textContent = 'Chọn đội của bạn nhé!';
+    return;
+  }
+  const r = await call<{ ok: boolean; error?: string; token?: string }>(socket, 'player:join', { name, token, teamId: joinTeam });
   if (r.ok && r.token) {
     localStorage.setItem(TOKEN_KEY, r.token);
     joinEl.hidden = true;
@@ -108,7 +154,38 @@ function renderTop(s: PlayerState) {
   $('#me-name').textContent = s.me.name;
   $('#me-horse').innerHTML = horseSvg(s.me.color);
   $('#me-score').textContent = fmtPoints(s.me.score);
+  const teamEl = $('#me-team');
+  teamEl.hidden = !s.myTeam;
+  teamEl.textContent = s.myTeam ? `Đội ${s.myTeam.name}` : '';
   document.documentElement.style.setProperty('--pc', playerColor(s.me.color));
+  if (s.myTeam) document.documentElement.style.setProperty('--tc', playerColor(s.myTeam.color));
+}
+
+function renderLobby(s: PlayerState) {
+  // With teams set up, the colour comes from the team and the player picks (or switches) a team here.
+  const picker = teams.length
+    ? `<div class="team-pick" id="lobby-teams"><div class="team-pick-title">${s.me.teamId ? 'Đổi đội (trước khi bắt đầu)' : 'Chọn đội của bạn'}</div>${teamButtons(s.me.teamId)}</div>`
+    : '<button class="btn ghost" id="color">🎨 Đổi màu ngựa</button>';
+  screen.innerHTML = `
+    <div class="panel center pop-in">
+      <div class="lobby-horse">${horseSvg(s.me.color, 'running')}</div>
+      <h2>Bạn đã vào rồi! 🎉</h2>
+      <p class="you">${esc(s.me.name)}</p>
+      ${s.myTeam ? `<p class="team-line">Đội <b>${esc(s.myTeam.name)}</b></p>` : ''}
+      <p>Nhìn lên màn hình lớn và chờ host bắt đầu nhé.</p>
+      ${picker}
+    </div>`;
+  const colorBtn = document.getElementById('color');
+  if (colorBtn) colorBtn.onclick = () => call(socket, 'player:color', {});
+  const pick = document.getElementById('lobby-teams');
+  if (pick) {
+    pick.onclick = async (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('.team-btn');
+      if (!b || b.disabled || b.dataset.team === s.me.teamId) return;
+      const r = await call(socket, 'player:team', { teamId: b.dataset.team });
+      if (!r.ok) toast(r.error ?? 'Không đổi được đội.', 'error');
+    };
+  }
 }
 
 function startTimer(endsAt: number, el: HTMLElement) {
@@ -131,7 +208,7 @@ function render(s: PlayerState) {
     pendingChoice = null;
   }
   const answered = s.myAnswer !== null || pendingChoice !== null;
-  const key = `${s.phase}|${q?.index ?? ''}|${answered}|${s.result ? 'r' : ''}|${s.me.color}`;
+  const key = `${s.phase}|${q?.index ?? ''}|${answered}|${s.result ? 'r' : ''}|${s.me.color}|${s.me.teamId}`;
   if (key === screenKey) {
     updateLive(s);
     return;
@@ -141,15 +218,7 @@ function render(s: PlayerState) {
 
   switch (s.phase) {
     case 'lobby':
-      screen.innerHTML = `
-        <div class="panel center pop-in">
-          <div class="lobby-horse">${horseSvg(s.me.color, 'running')}</div>
-          <h2>Bạn đã vào rồi! 🎉</h2>
-          <p class="you">${esc(s.me.name)}</p>
-          <p>Nhìn lên màn hình lớn và chờ host bắt đầu nhé.</p>
-          <button class="btn ghost" id="color">🎨 Đổi màu ngựa</button>
-        </div>`;
-      $('#color').onclick = () => call(socket, 'player:color', {});
+      renderLobby(s);
       break;
 
     case 'getready':
@@ -174,6 +243,30 @@ function render(s: PlayerState) {
       renderResult(s);
       break;
 
+    case 'teamfinal': {
+      const t = s.myTeam;
+      if (!t) {
+        screen.innerHTML = `
+          <div class="panel center pop-in">
+            <div class="big-emoji">🏆</div>
+            <h2>Đang công bố kết quả đội…</h2>
+            <p>Kết quả cá nhân sẽ có ngay sau đây!</p>
+          </div>`;
+        break;
+      }
+      const medal = ['🥇', '🥈', '🥉'][t.rank - 1] ?? '🏁';
+      screen.innerHTML = `
+        <div class="panel center pop-in final-card">
+          <div class="big-emoji">${medal}</div>
+          <p class="team-line">Đội <b>${esc(t.name)}</b></p>
+          <h2>Hạng ${t.rank} / ${t.total}</h2>
+          <div class="final-score">${fmtPoints(t.score)} <small>điểm đội</small></div>
+          <div class="lobby-horse">${horseSvg(t.color, t.rank <= 3 ? 'running' : '')}</div>
+          <p>${t.rank === 1 ? 'Đội bạn vô địch! 🏆' : t.rank <= 3 ? 'Đội bạn lên bục rồi!' : 'Cả đội đã chiến đấu hết mình!'}</p>
+        </div>`;
+      break;
+    }
+
     case 'final': {
       const medal = ['🥇', '🥈', '🥉'][s.me.rank - 1] ?? '🏁';
       screen.innerHTML = `
@@ -183,6 +276,7 @@ function render(s: PlayerState) {
           <div class="final-score">${fmtPoints(s.me.score)} <small>điểm</small></div>
           <div class="lobby-horse">${horseSvg(s.me.color, s.me.rank <= 3 ? 'running' : '')}</div>
           <p>${s.me.rank === 1 ? 'Vô địch! Ngựa của bạn về nhất! 🏆' : s.me.rank <= 3 ? 'Tuyệt vời, lên bục rồi!' : 'Cảm ơn bạn đã tham gia!'}</p>
+          ${s.myTeam ? `<p class="team-line">Đội <b>${esc(s.myTeam.name)}</b>: hạng ${s.myTeam.rank} / ${s.myTeam.total}</p>` : ''}
         </div>`;
       break;
     }
