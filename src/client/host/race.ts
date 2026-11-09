@@ -69,6 +69,9 @@ const MIN_SPAN = 1500;
 /** Team scores are averages and grow slower, so the camera may zoom in more. */
 const MIN_SPAN_TEAMS = 600;
 const RACE_MS = 3400;
+/** Above this many player lanes, lanes are sorted by rank (leader on top) instead of grouped by team. */
+export const SORT_LANES_ABOVE = 12;
+const FLIP_MS = 700;
 
 const easeInOut = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 
@@ -93,15 +96,44 @@ export class RaceTrack {
   private laneH = 60;
   private ranks = new Map<string, number>();
   private mode: 'player' | 'team' = 'player';
+  /** Lanes sorted by score (big games): re-sorted once the horses have finished running. */
+  private pendingSort = false;
+  private baseOrder = new Map<string, number>();
+  /** Lanes currently scrolled into view: the camera only frames those horses. */
+  private visible = new Set<string>();
+  private io: IntersectionObserver;
+  private leaderEl: HTMLElement;
+  private looping = false;
 
   constructor() {
     this.el = document.createElement('div');
     this.el.className = 'race';
-    this.el.innerHTML = `<div class="race-scroll"><div class="race-inner"><div class="race-markers"></div></div></div>`;
+    this.el.innerHTML = `<div class="race-scroll"><div class="race-inner"></div></div><div class="race-markers"></div><div class="race-leader" hidden></div>`;
     this.inner = this.el.querySelector('.race-inner')!;
     this.markersEl = this.el.querySelector('.race-markers')!;
+    this.leaderEl = this.el.querySelector('.race-leader')!;
     new ResizeObserver(() => this.measure()).observe(this.el);
+    this.io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const id = (e.target as HTMLElement).dataset.id!;
+          if (e.isIntersecting) this.visible.add(id);
+          else this.visible.delete(id);
+        }
+        this.kick();
+      },
+      { root: this.el.querySelector('.race-scroll'), threshold: 0.5 },
+    );
   }
+
+  /** Restart the animation loop (e.g. the camera must re-frame after scrolling). */
+  private kick() {
+    if (this.looping) return;
+    this.looping = true;
+    this.lastT = performance.now();
+    this.raf = requestAnimationFrame((t) => this.frame(t));
+  }
+
 
   private measure() {
     // Lanes share the height via flexbox (with a minimum, then the track scrolls).
@@ -116,13 +148,18 @@ export class RaceTrack {
    * Sync lanes (in display order). With animate=true horses gallop from where they are to their new score.
    * `mode` switches between player and team lanes; changing it rebuilds the track.
    */
-  update(lanes: Lane[], mode: 'player' | 'team', animate: boolean, startFrom?: Map<string, number>) {
+  update(lanes: Lane[], mode: 'player' | 'team', animate: boolean, startFrom?: Map<string, number>, sorted = false) {
     if (mode !== this.mode) {
       this.mode = mode;
-      for (const r of this.runners.values()) r.row.remove();
+      for (const r of this.runners.values()) {
+        this.io.unobserve(r.row);
+        r.row.remove();
+      }
       this.runners.clear();
+      this.visible.clear();
       this.el.classList.toggle('teams', mode === 'team');
     }
+    this.baseOrder = new Map(lanes.map((l, i) => [l.id, i]));
     const players = lanes;
     const seen = new Set<string>();
     for (const p of players) {
@@ -147,16 +184,24 @@ export class RaceTrack {
     }
     for (const [id, r] of this.runners) {
       if (!seen.has(id)) {
+        this.io.unobserve(r.row);
         r.row.remove();
         this.runners.delete(id);
+        this.visible.delete(id);
       }
     }
     const list = [...players];
     this.ranks = new Map(list.map((p) => [p.id, 1 + list.filter((o) => o.score > p.score).length]));
-    this.arrange(lanes);
+    const moving = animate && [...this.runners.values()].some((r) => r.to !== r.from);
+    if (!sorted) this.arrange(lanes);
+    else {
+      this.arrange(lanes.map((l) => ({ ...l, group: null })));
+      // Keep the lanes still while horses run; re-sort when they have arrived.
+      if (moving) this.pendingSort = true;
+      else this.sortRows(false);
+    }
     this.measure();
 
-    const moving = animate && [...this.runners.values()].some((r) => r.to !== r.from);
     if (moving) {
       for (const r of this.runners.values()) {
         const gained = Math.round(r.to - r.from);
@@ -169,7 +214,35 @@ export class RaceTrack {
     }
     this.t0 = this.lastT = performance.now();
     cancelAnimationFrame(this.raf);
+    this.looping = true;
     this.raf = requestAnimationFrame((t) => this.frame(t));
+  }
+
+  /** Orders the rows by score (leader on top). With flip=true rows slide to their new place. */
+  private sortRows(flip: boolean) {
+    const order = [...this.runners.values()].sort(
+      (a, b) => b.to - a.to || (this.baseOrder.get(a.id) ?? 0) - (this.baseOrder.get(b.id) ?? 0),
+    );
+    const rows = [...this.inner.querySelectorAll<HTMLElement>(':scope > .race-row')];
+    if (!order.some((r, i) => rows[i] !== r.row)) return;
+    const before = flip ? new Map(order.map((r) => [r.id, r.row.offsetTop])) : null;
+    for (const r of order) this.inner.appendChild(r.row);
+    if (!before) return;
+    for (const r of order) {
+      const dy = before.get(r.id)! - r.row.offsetTop;
+      if (!dy) continue;
+      r.row.style.transition = 'none';
+      r.row.style.transform = `translateY(${dy}px)`;
+    }
+    void this.inner.offsetHeight;
+    for (const r of order) {
+      if (!r.row.style.transform) continue;
+      r.row.style.transition = `transform ${FLIP_MS}ms cubic-bezier(0.3, 1.2, 0.4, 1)`;
+      r.row.style.transform = '';
+    }
+    setTimeout(() => {
+      for (const r of order) r.row.style.transition = '';
+    }, FLIP_MS + 50);
   }
 
   /** Puts the rows in the given order and marks the start/end of each group block. */
@@ -190,6 +263,8 @@ export class RaceTrack {
   private createRunner(p: Lane, pos: number): Runner {
     const row = document.createElement('div');
     row.className = 'race-row';
+    row.dataset.id = p.id;
+    this.io.observe(row);
     row.style.setProperty('--pc', playerColor(p.color));
     row.innerHTML = `
       <div class="rl"><span class="rl-team"></span><span class="rl-rank">–</span><span class="rl-text"><span class="rl-name">${esc(p.name)}</span><span class="rl-sub"></span></span><span class="rl-score">0</span></div>
@@ -235,7 +310,9 @@ export class RaceTrack {
     let lo = Infinity;
     let hi = -Infinity;
     // Include where horses are heading so the leader never runs off-screen.
-    for (const r of this.runners.values()) {
+    // When the lanes scroll, only the horses in view are framed (so the back of the field can be read too).
+    const framed = [...this.runners.values()].filter((r) => this.visible.has(r.id));
+    for (const r of framed.length ? framed : this.runners.values()) {
       lo = Math.min(lo, r.pos, r.to);
       hi = Math.max(hi, r.pos, r.to);
     }
@@ -268,7 +345,14 @@ export class RaceTrack {
     this.render();
     const settled = Math.abs(tMin - this.camMin) + Math.abs(tMax - this.camMax) < (tMax - tMin) * 0.002;
     if (running || !settled) this.raf = requestAnimationFrame((tt) => this.frame(tt));
-    else this.applyRanks();
+    else {
+      this.looping = false;
+      this.applyRanks();
+      if (this.pendingSort && !running) {
+        this.pendingSort = false;
+        this.sortRows(true);
+      }
+    }
   }
 
   private render() {
@@ -277,10 +361,16 @@ export class RaceTrack {
     const usable = Math.max(50, this.trackW - horseW - 12);
     const span = this.camMax - this.camMin || 1;
     const x = (pos: number) => horseW + ((pos - this.camMin) / span) * usable;
+    let leader: Runner | null = null;
     for (const r of this.runners.values()) {
       r.runner.style.transform = `translate3d(${(x(r.pos) - horseW).toFixed(1)}px, 0, 0)`;
       r.scoreEl.textContent = fmtPoints(r.pos);
+      if (!leader || r.pos > leader.pos) leader = r;
     }
+    // The leader scrolled out of view: keep them visible as a badge.
+    const showLeader = !!leader && this.visible.size > 0 && !this.visible.has(leader.id) && leader.pos > 0;
+    this.leaderEl.hidden = !showLeader;
+    if (showLeader) this.leaderEl.textContent = `👑 ${leader!.nameEl.textContent} · ${fmtPoints(leader!.pos)}`;
     // Ground texture scrolls with the camera for a sense of speed.
     const pxPerPt = usable / span;
     this.el.style.setProperty('--ground-x', `${(-this.camMin * pxPerPt) % 120}px`);
@@ -315,6 +405,10 @@ export class RaceTrack {
 }
 
 /** Lanes for the current view (team or player) of a host state. */
-export function lanesFor(s: HostState): { lanes: Lane[]; mode: 'player' | 'team' } {
-  return s.teamView ? { lanes: teamLanes(s), mode: 'team' } : { lanes: playerLanes(s.players, s.teams), mode: 'player' };
+export function lanesFor(s: HostState): { lanes: Lane[]; mode: 'player' | 'team'; sorted: boolean } {
+  if (s.teamView) return { lanes: teamLanes(s), mode: 'team', sorted: false };
+  const lanes = playerLanes(s.players, s.teams);
+  if (lanes.length <= SORT_LANES_ABOVE) return { lanes, mode: 'player', sorted: false };
+  // Many players: sorted by rank, so team blocks are replaced by the team name under each player.
+  return { lanes: lanes.map((l) => ({ ...l, group: null, sub: l.groupName ? esc(l.groupName) : undefined })), mode: 'player', sorted: true };
 }

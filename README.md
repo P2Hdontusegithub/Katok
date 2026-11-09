@@ -309,6 +309,7 @@ Trên đầu các màn kết thúc có **thanh điều hướng** (⚡ Nhanh nh�
 - 🏇 / 📋: chuyển qua lại giữa đường đua và bảng điểm.
 - ✍️ (phím **M**): mở màn hình chấm điểm thủ công.
 - 🔊: bật/tắt âm thanh. ⛶ (phím **F**): bật/tắt toàn màn hình.
+- Đông người: đường đua tự sắp theo hạng (người dẫn đầu trên cùng) và cuộn được; khi cuộn xuống, đường đua tự co giãn theo những người đang thấy trên màn hình. Bảng kết quả mặc định xếp theo người trả lời đúng nhanh nhất câu vừa rồi; bấm tiêu đề cột để xếp theo cột khác. Phím **↑/↓/PageUp/PageDown** để cuộn (dùng được với bút trình chiếu).
 - 📱 (phím **J**, ngoài sảnh): hiện lại mã QR và link tham gia thật to cho người đến muộn. Bấm **📌 Ghim** để giữ một mã QR nhỏ ở góc màn hình suốt trận.
 - ☰: kết thúc game sớm, ván mới (giữ người chơi, điểm về 0), về sảnh và xóa người chơi, xuất CSV, tải lại câu hỏi, đăng xuất.
 

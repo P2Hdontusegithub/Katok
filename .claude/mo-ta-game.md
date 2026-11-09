@@ -1,6 +1,6 @@
 # Ka-tok — Mô tả chi tiết cách game hoạt động (tài liệu cho AI)
 
-> Tài liệu này mô tả **trạng thái hiện tại của mã nguồn** (phiên bản `1.1.0` trong `package.json`, ngày 2026-11-08) để AI/lập trình viên đọc lại nhanh trước khi sửa code.
+> Tài liệu này mô tả **trạng thái hiện tại của mã nguồn** (phiên bản `2.0.0` trong `package.json`, ngày 2026-11-09) để AI/lập trình viên đọc lại nhanh trước khi sửa code.
 > Khi sửa hành vi game, hãy cập nhật file này cho khớp.
 >
 > Nguồn gốc: prompt ban đầu ở `ideas/Mo-ta-katok.txt`; các ghi chú điều chỉnh/ý tưởng tiếp theo ở `ideas/Dieu-chinh-game-v1.txt`; yêu cầu soạn bộ câu hỏi ở `ideas/Yeu-cau-cau-hoi.txt`. Hướng dẫn cho người dùng cuối nằm ở `README.md`.
@@ -229,8 +229,8 @@ Client gửi (đều có ack `{ ok, error? }`):
 `main.ts`:
 - Đăng nhập → nhận `host:state` → `render()`. Mỗi màn hình là một `View { update(s), destroy?() }`; view chỉ được **tạo lại** khi `keyFor(state)` đổi (`question` và `reveal` dùng chung một view `q-<index>` để chuyển cảnh mượt), còn lại gọi `update`.
 - Âm thanh theo phase: `getready` → `start`; `question` → nhạc nền (dừng khi rời phase); `reveal` → `ring` (reng) rồi `reveal`; `leaderboard` → `pop`; `teamfinal/final` → `fanfare` + pháo giấy. Trình duyệt chỉ cho phát tiếng sau thao tác đầu tiên (`unlockAudio`).
-- Nút lớn góc dưới phải (`#next`) đổi nhãn theo phase: Bắt đầu ▶ / Hiện đáp án ⏭ / Dừng ⏹ / Đường đua 🏇 / Bảng điểm 📋 / Câu tiếp ▶ (câu cuối: "Kết quả chung cuộc 🏆") / Bục cá nhân 🏅. Phím tắt: **Space/Enter/→** = next, **M** = chấm tay, **F** = toàn màn hình, **Esc** đóng chấm tay.
-- Thanh trên: tên bộ câu hỏi, "Câu x/y", 👥 online/tổng; nút 🏇/📋 (chuyển nhanh), ✍️, 🔊, ⛶, menu ☰ (Kết thúc game, Ván mới, Về sảnh & xoá người chơi, Xuất CSV, Tải lại câu hỏi, Đăng xuất). Thao tác nguy hiểm có `confirm()`.
+- Nút lớn góc dưới phải (`#next`) đổi nhãn theo phase: Bắt đầu ▶ / Hiện đáp án ⏭ / Dừng ⏹ / Đường đua 🏇 / Bảng điểm 📋 / Câu tiếp ▶ (câu cuối: "Kết quả chung cuộc 🏆") / Bục cá nhân 🏅. Phím tắt: **Space/Enter/→** = next, **M** = chấm tay, **F** = toàn màn hình, **J** = lớp phủ QR, **↑/↓** (một đoạn) và **PageUp/PageDown** (một trang) = cuộn đường đua / bảng điểm, **Esc** đóng chấm tay / lớp phủ QR.
+- Thanh trên: tên bộ câu hỏi, "Câu x/y", 👥 online/tổng; nút 🏇/📋 (chuyển nhanh), ✍️, 🔊, ⛶, menu ☰ (Kết thúc game, Ván mới, Về sảnh & xoá người chơi, Hiển thị theo đội/từng người (khi có đội), Xuất CSV, Tải lại câu hỏi, Đăng xuất). Thao tác nguy hiểm có `confirm()`.
 - Bắt đầu khi chưa có ai → hỏi xác nhận.
 
 `views.ts`:
@@ -238,7 +238,7 @@ Client gửi (đều có ack `{ ok, error? }`):
 - **getReadyView**: số câu, nhãn hệ số (×N ĐIỂM / "Câu khởi động"), câu hỏi chữ lớn, thanh chạy theo `readTime`.
 - **questionView**: câu hỏi, đồng hồ vòng tròn (tích tắc 5 giây cuối, gấp hơn 3 giây cuối), ảnh minh họa (hoặc ngựa chạy), số người đã trả lời, dải "feed" tên + thời gian người vừa trả lời (tối đa 30 chip), 2–4 ô đáp án màu/hình. Khi sang `reveal`: đánh dấu ✔/✘ trên ô, thay ảnh bằng biểu đồ cột số người chọn từng đáp án + top 3 đúng nhanh nhất (hoặc "Không ai trả lời đúng 😅").
 - **raceView**: gắn `RaceTrack` dùng chung; tiêu đề "sau câu x/y".
-- **boardView**: khi `teamView` → `renderTeamBoard`: bảng đội chữ lớn (*Hạng ▲▼, Đội, Đúng x/sĩ số, TG trung bình, ⚡ Nhanh nhất đội, + Điểm, Điểm đội*; chưa có `round` thì *Hạng, Đội, Thành viên, Điểm đội*) + cột `.top-players` Top 10 cá nhân. Ngược lại, nếu có `round`: cột *Thứ tự (kèm ▲/▼ đổi hạng), Người chơi (⚡ nếu nhanh nhất), Đáp án (hình + ✔/✘), Thời gian, Điểm lượt này, Tổng điểm*; top 3 được tô nổi. Nếu không có `round` (ví dụ sau khi khôi phục): chỉ *Thứ tự, Người chơi, Tổng điểm*. Hiển thị **tất cả** người chơi trong bảng có cuộn.
+- **boardView**: khi `teamView` → `renderTeamBoard`: bảng đội chữ lớn (*Hạng ▲▼, Đội, Đúng x/sĩ số, TG trung bình, ⚡ Nhanh nhất đội, + Điểm, Điểm đội*; chưa có `round` thì *Hạng, Đội, Thành viên, Điểm đội*) + cột `.top-players` Top 10 cá nhân. Ngược lại, nếu có `round`: cột *Thứ tự (kèm ▲/▼ đổi hạng), Người chơi (⚡ nếu nhanh nhất), Đáp án (hình + ✔/✘), Thời gian, Điểm lượt này, Tổng điểm*; top 3 được tô nổi. **Bấm tiêu đề cột để sắp xếp** (bấm lần nữa để đảo chiều); mặc định sắp theo *Thời gian*: người đúng nhanh nhất trước, rồi người sai, cuối cùng người không trả lời (`sortRows`). Nếu không có `round` (ví dụ sau khi khôi phục): chỉ *Thứ tự, Người chơi, Tổng điểm*. Hiển thị **tất cả** người chơi trong bảng có cuộn.
 - **awardsView**: tiêu đề giải, danh sách lớn (giải cá nhân) hoặc lưới thẻ đội (`teamBest`).
 - **teamFinalView**: bục 2-1-3 cho đội (ngựa của từng thành viên, tên thành viên, điểm TB), danh sách đội hạng 4–15.
 - **finalView**: bục 2-1-3 cá nhân, danh sách hạng 4–15. Màn kết thúc **cuối cùng** (bục đội, hoặc bục cá nhân nếu không có đội) có thêm nút Xuất CSV / Ván mới / Về sảnh (`finalActions`).
@@ -246,7 +246,9 @@ Client gửi (đều có ack `{ ok, error? }`):
 `race.ts` (`RaceTrack`):
 - `update(lanes, mode, animate, startFrom)` nhận danh sách `Lane { id, name, color, score, offline?, group?, groupName?, sub? }` theo thứ tự hiển thị; `lanesFor(s)` chọn `playerLanes` (mỗi người một làn) hoặc `teamLanes` (mỗi đội một làn, class `.race.teams`: làn cao, chữ to, dòng phụ `sub`). Đổi `mode` thì dựng lại toàn bộ làn.
 - Mỗi làn (`.race-row`): nhãn trái (tên nhóm ở làn đầu nhóm, hạng, tên + dòng phụ, điểm chạy số) + làn có ngựa SVG và 👑 cho người dẫn đầu.
-- Thứ tự làn (chế độ từng người): các đội theo thứ tự tạo (thành viên nằm sát nhau, có viền nhóm), rồi người chơi lẻ theo thứ tự vào phòng.
+- Thứ tự làn (chế độ từng người): ≤ `SORT_LANES_ABOVE` (12) người → các đội theo thứ tự tạo (thành viên nằm sát nhau, có viền nhóm), rồi người chơi lẻ theo thứ tự vào phòng. **Đông hơn** → làn sắp theo điểm (người dẫn đầu trên cùng), tên đội chuyển thành dòng phụ dưới tên; ở phase `race` làn giữ nguyên chỗ khi ngựa chạy rồi mới trượt về chỗ mới (FLIP, 700 ms).
+- Làn cao tối thiểu 34 px (chế độ từng người); quá nhiều thì cuộn dọc. `IntersectionObserver` theo dõi các làn đang thấy: **camera chỉ bao các ngựa đang hiện trong khung**, nên cuộn xuống nhóm cuối thì đường đua tự co giãn theo nhóm đó. Khi người dẫn đầu bị cuộn khuất, huy hiệu `.race-leader` "👑 tên · điểm" hiện ở góc trên phải.
+- Lớp mốc điểm (`.race-markers`) nằm ngoài vùng cuộn nên nhãn mốc luôn hiện.
 - Khoảng camera tối thiểu: 1500 điểm (từng người), 600 điểm (theo đội, vì điểm trung bình tăng chậm hơn).
 - Ở `lobby/getready/question`, track được cập nhật **không animation** (giữ vị trí cũ). Ở `race`, ngựa phi từ `score − gained` tới `score` trong 3,4 s (easeInOut, mỗi con trễ ngẫu nhiên ≤280 ms), hiện "+điểm", tiếng vó ngựa.
 - Camera: khoảng hiển thị `[camMin, camMax]` bao trọn mọi ngựa (cả vị trí đích), tối thiểu 1500 điểm, nội suy mượt; vạch mốc "XUẤT PHÁT"/mốc điểm tròn tự chọn bước; mặt đất cuộn theo camera.
@@ -297,7 +299,7 @@ CSV (`exportRows`): cột *Hạng, Người chơi, [Đội], Câu 1..N (điểm 
 - Tham gia bằng link tự nhập: `selectUrl` chỉ đổi URL hiển thị/QR, không đổi gì ở server. Bug "không vào được bằng link tự tạo, phải dùng cloudflare tunnel" được ghi trong `ideas/Dieu-chinh-game-v1.txt`, **chưa xác định nguyên nhân**.
 - Một số thao tác (rename, kick, adjust) không lọc theo phase — host có thể làm bất cứ lúc nào.
 - `scripts/bots.mjs` mặc định 18 bot với tên kiểu `A1 - 1 🤖`, chia đều vào các đội (các bot liên tiếp chung đội, không vượt `max`).
-- Phiên bản hiện tại: `package.json` `"version": "1.0.0"`.
+- Phiên bản hiện tại: `package.json` `"version": "2.0.0"`.
 
 ## 16. Bản đồ "muốn sửa X thì vào đâu"
 
