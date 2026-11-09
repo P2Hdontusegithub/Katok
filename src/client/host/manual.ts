@@ -1,6 +1,5 @@
 // Manual scoring screen – backup when phones/network fail, or for corrections.
 import type { HostState } from '../../shared/types';
-import { MAX_TEAM_SIZE } from '../../shared/types';
 import { esc, fmtPoints, toast } from '../common/dom';
 import { playerColor } from '../common/horse';
 import type { Ctx } from './views';
@@ -156,7 +155,7 @@ export class ManualPanel {
         const t = s.teams.find((x) => x.id === p.teamId);
         return t ? ` <small class="m-team">· ${esc(t.name)}</small>` : '';
       }
-      const opts = s.teams.map((t) => `<option value="${t.id}" ${t.id === p.teamId ? 'selected' : ''}>${esc(t.name)} (${t.memberIds.length}/${MAX_TEAM_SIZE})</option>`);
+      const opts = s.teams.map((t) => `<option value="${t.id}" ${t.id === p.teamId ? 'selected' : ''}>${esc(t.name)} (${t.memberIds.length}/${s.maxTeamSize})</option>`);
       return ` <select class="team-sel" title="Đội"><option value="">— Không đội —</option>${opts.join('')}</select>`;
     };
     this.body.innerHTML =

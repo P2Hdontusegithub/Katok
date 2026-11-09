@@ -77,6 +77,7 @@ Katok/
 | `latencyCompensationMs` | 800 | Biên độ tin đồng hồ điện thoại khi tính thời gian trả lời |
 | `autoEndWhenAllAnswered` | true | Tự kết thúc câu khi mọi người chơi online (không tính người chấm tay) đã trả lời |
 | `maxPlayers` | 150 (config.json hiện đặt 180) | Số người tối đa |
+| `maxTeamSize` | 3 (config.json hiện đặt 20) | Số người tối đa mỗi đội; gửi cho client qua `HostState.maxTeamSize` và `TeamOption.max` |
 | `scoring.maxPoints/minPoints` | 1000/500 | Điểm đúng ngay lập tức / đúng ở giây cuối |
 | `scoring.wrongPoints/noAnswerPoints` | 0/0 | Điểm khi sai / không trả lời |
 | `scoring.speedBonus` | [300,200,100] | Thưởng cho người đúng nhanh nhất, nhì, ba… |
@@ -109,7 +110,8 @@ Katok/
 - `Player { id, token, name, color (chỉ số 0–15 trong PLAYER_COLORS), score, socketId|null, manual, teamId|null }`
   - `token` (32 hex) lưu ở `localStorage` điện thoại để **tự vào lại** sau khi mất kết nối/tải lại trang.
   - `manual = true` khi host thêm người chơi không có điện thoại.
-- `Team { id, name (≤12 ký tự), color }` — `MAX_TEAM_SIZE = 3` (`shared/types.ts`).
+- `Team { id, name (≤12 ký tự), color }` — sĩ số tối đa = `config.maxTeamSize` (mặc định `DEFAULT_TEAM_SIZE = 3` ở `shared/types.ts`).
+- `displayMode: 'auto' | 'player' | 'team'` (action `setDisplayMode`, lưu snapshot). `HostState.teamView` = kết quả sau khi giải "auto" (theo đội khi có ≥1 đội có thành viên).
 - `answers: Map<playerId, { choice, timeMs, at }>` — chỉ cho câu hiện tại.
 - `round: RoundResult` — kết quả câu vừa xong (đáp án đúng, số người chọn từng đáp án, từng dòng `RoundRow`).
 - `adjustments` — lịch sử chỉnh điểm tay (giữ tối đa 200, gửi host 50 mục gần nhất).
@@ -170,6 +172,7 @@ Sai:           wrongPoints × points
 - `prevRank` chỉ được tính khi trước câu đó điểm không đồng đều (tránh mũi tên vô nghĩa ở câu 1).
 - `RoundRow.fastest` = người đúng nhanh nhất (hiện ⚡).
 - **Điểm đội** = trung bình cộng điểm thành viên (`teamStats`), hạng đội chỉ tính các đội có thành viên.
+- `RoundResult.teamRows` (tính trong `hostState()` bằng `teamRows()` từ `rows` + điểm hiện tại): hạng/hạng trước của đội, sĩ số, số người trả lời, số đúng, thời gian TB (của người đã trả lời), điểm cộng TB (= quãng ngựa đội chạy), người đúng nhanh nhất đội.
 
 ## 9b. Giải đặc biệt (`Game.awards()`)
 
@@ -231,18 +234,20 @@ Client gửi (đều có ack `{ ok, error? }`):
 - Bắt đầu khi chưa có ai → hỏi xác nhận.
 
 `views.ts`:
-- **lobbyView**: thẻ tham gia (URL, QR, ô chọn URL); chọn bộ câu hỏi + ⟳ Tải lại + danh sách lỗi (tối đa 6); form tạo đội (tên + ô màu, màu đã dùng bị khóa); thẻ đội (bấm tên → đổi tên, chấm màu → xoay sang màu trống kế tiếp, ✕ → xóa, bấm thành viên → mời ra); bong bóng người chơi lẻ (bấm → mời ra), người mất kết nối hiện mờ; tiếng `pop` khi có người mới.
+- **lobbyView**: thẻ tham gia (URL, QR, ô chọn URL); ô **Hiển thị** (Tự động / Theo đội / Từng người); chọn bộ câu hỏi + ⟳ Tải lại + danh sách lỗi (tối đa 6); form tạo đội (tên + ô màu, màu đã dùng bị khóa); thẻ đội (bấm tên → đổi tên, chấm màu → xoay sang màu trống kế tiếp, ✕ → xóa, bấm thành viên → mời ra); bong bóng người chơi lẻ (bấm → mời ra), người mất kết nối hiện mờ; tiếng `pop` khi có người mới.
 - **getReadyView**: số câu, nhãn hệ số (×N ĐIỂM / "Câu khởi động"), câu hỏi chữ lớn, thanh chạy theo `readTime`.
 - **questionView**: câu hỏi, đồng hồ vòng tròn (tích tắc 5 giây cuối, gấp hơn 3 giây cuối), ảnh minh họa (hoặc ngựa chạy), số người đã trả lời, dải "feed" tên + thời gian người vừa trả lời (tối đa 30 chip), 2–4 ô đáp án màu/hình. Khi sang `reveal`: đánh dấu ✔/✘ trên ô, thay ảnh bằng biểu đồ cột số người chọn từng đáp án + top 3 đúng nhanh nhất (hoặc "Không ai trả lời đúng 😅").
 - **raceView**: gắn `RaceTrack` dùng chung; tiêu đề "sau câu x/y".
-- **boardView**: nếu có `round`: cột *Thứ tự (kèm ▲/▼ đổi hạng), Người chơi (⚡ nếu nhanh nhất), Đáp án (hình + ✔/✘), Thời gian, Điểm lượt này, Tổng điểm*; top 3 được tô nổi. Nếu không có `round` (ví dụ sau khi khôi phục): chỉ *Thứ tự, Người chơi, Tổng điểm*. Hiển thị **tất cả** người chơi trong bảng có cuộn.
+- **boardView**: khi `teamView` → `renderTeamBoard`: bảng đội chữ lớn (*Hạng ▲▼, Đội, Đúng x/sĩ số, TG trung bình, ⚡ Nhanh nhất đội, + Điểm, Điểm đội*; chưa có `round` thì *Hạng, Đội, Thành viên, Điểm đội*) + cột `.top-players` Top 10 cá nhân. Ngược lại, nếu có `round`: cột *Thứ tự (kèm ▲/▼ đổi hạng), Người chơi (⚡ nếu nhanh nhất), Đáp án (hình + ✔/✘), Thời gian, Điểm lượt này, Tổng điểm*; top 3 được tô nổi. Nếu không có `round` (ví dụ sau khi khôi phục): chỉ *Thứ tự, Người chơi, Tổng điểm*. Hiển thị **tất cả** người chơi trong bảng có cuộn.
 - **awardsView**: tiêu đề giải, danh sách lớn (giải cá nhân) hoặc lưới thẻ đội (`teamBest`).
 - **teamFinalView**: bục 2-1-3 cho đội (ngựa của từng thành viên, tên thành viên, điểm TB), danh sách đội hạng 4–15.
 - **finalView**: bục 2-1-3 cá nhân, danh sách hạng 4–15. Màn kết thúc **cuối cùng** (bục đội, hoặc bục cá nhân nếu không có đội) có thêm nút Xuất CSV / Ván mới / Về sảnh (`finalActions`).
 
 `race.ts` (`RaceTrack`):
-- Mỗi người chơi một làn (`.race-row`): nhãn trái (tên đội ở làn đầu nhóm, hạng, tên, điểm chạy số) + làn có ngựa SVG và 👑 cho người dẫn đầu.
-- Thứ tự làn: các đội theo thứ tự tạo (thành viên nằm sát nhau, có viền nhóm), rồi người chơi lẻ theo thứ tự vào phòng. **Làn không sắp theo hạng.**
+- `update(lanes, mode, animate, startFrom)` nhận danh sách `Lane { id, name, color, score, offline?, group?, groupName?, sub? }` theo thứ tự hiển thị; `lanesFor(s)` chọn `playerLanes` (mỗi người một làn) hoặc `teamLanes` (mỗi đội một làn, class `.race.teams`: làn cao, chữ to, dòng phụ `sub`). Đổi `mode` thì dựng lại toàn bộ làn.
+- Mỗi làn (`.race-row`): nhãn trái (tên nhóm ở làn đầu nhóm, hạng, tên + dòng phụ, điểm chạy số) + làn có ngựa SVG và 👑 cho người dẫn đầu.
+- Thứ tự làn (chế độ từng người): các đội theo thứ tự tạo (thành viên nằm sát nhau, có viền nhóm), rồi người chơi lẻ theo thứ tự vào phòng.
+- Khoảng camera tối thiểu: 1500 điểm (từng người), 600 điểm (theo đội, vì điểm trung bình tăng chậm hơn).
 - Ở `lobby/getready/question`, track được cập nhật **không animation** (giữ vị trí cũ). Ở `race`, ngựa phi từ `score − gained` tới `score` trong 3,4 s (easeInOut, mỗi con trễ ngẫu nhiên ≤280 ms), hiện "+điểm", tiếng vó ngựa.
 - Camera: khoảng hiển thị `[camMin, camMax]` bao trọn mọi ngựa (cả vị trí đích), tối thiểu 1500 điểm, nội suy mượt; vạch mốc "XUẤT PHÁT"/mốc điểm tròn tự chọn bước; mặt đất cuộn theo camera.
 - Chiều cao làn chia đều theo flexbox, có chiều cao tối thiểu rồi cuộn dọc khi quá nhiều người.
@@ -290,10 +295,8 @@ CSV (`exportRows`): cột *Hạng, Người chơi, [Đội], Câu 1..N (điểm 
 
 - **Toast** (`public/css/base.css` `.toast`, `dom.ts → toast`): ẩn bằng `transform: translate(-50%, 140%)` từ `bottom: 28px`, không có `opacity/visibility` — khi ẩn nó trượt xuống đáy màn hình thay vì biến mất hẳn (khớp với bug "thông báo chạy xuống cuối màn hình mà không biến mất" ghi trong `ideas/Dieu-chinh-game-v1.txt`).
 - Tham gia bằng link tự nhập: `selectUrl` chỉ đổi URL hiển thị/QR, không đổi gì ở server. Bug "không vào được bằng link tự tạo, phải dùng cloudflare tunnel" được ghi trong `ideas/Dieu-chinh-game-v1.txt`, **chưa xác định nguyên nhân**.
-- Đông người (>100): đường đua 1 làn/người và bảng kết quả hiển thị tất cả → khó đọc trên màn hình lớn (vấn đề #1 trong `ideas/Dieu-chinh-game-v1.txt`).
-- `MAX_TEAM_SIZE = 3` là hằng số cứng trong `shared/types.ts` (bot cũng giả định 3).
 - Một số thao tác (rename, kick, adjust) không lọc theo phase — host có thể làm bất cứ lúc nào.
-- `scripts/bots.mjs` mặc định 18 bot với tên kiểu `A1 - 1 🤖` và tự xếp 3 bot/đội; README nói mặc định 8.
+- `scripts/bots.mjs` mặc định 18 bot với tên kiểu `A1 - 1 🤖`, chia đều vào các đội (các bot liên tiếp chung đội, không vượt `max`).
 - Phiên bản hiện tại: `package.json` `"version": "1.0.0"`.
 
 ## 16. Bản đồ "muốn sửa X thì vào đâu"

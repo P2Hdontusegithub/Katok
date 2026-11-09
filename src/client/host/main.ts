@@ -6,7 +6,7 @@ import { isMuted, setMuted, sfx, startMusic, stopMusic, unlockAudio } from '../c
 import { confetti } from './confetti';
 import { JoinPanel } from './join';
 import { ManualPanel } from './manual';
-import { RaceTrack } from './race';
+import { lanesFor, RaceTrack } from './race';
 import { awardsView, boardView, finalView, getReadyView, lobbyView, questionView, raceView, teamFinalView, type Ctx, type View } from './views';
 
 decorateBackground();
@@ -116,7 +116,10 @@ function render(s: HostState) {
   if (s.restored && !prev) toast('♻️ Đã khôi phục ván chơi trước khi máy chủ khởi động lại.', 'ok');
 
   // Keep horses at their pre-round positions so the race screen can animate the gain.
-  if (s.phase === 'lobby' || s.phase === 'getready' || s.phase === 'question') ctx.track.update(s.players, s.teams, false);
+  if (s.phase === 'lobby' || s.phase === 'getready' || s.phase === 'question') {
+    const { lanes, mode } = lanesFor(s);
+    ctx.track.update(lanes, mode, false);
+  }
 
   const key = keyFor(s);
   if (key !== viewKey && s.endIndex >= 0 && (prev?.endIndex ?? -1) !== s.endIndex) onEndStep(s);

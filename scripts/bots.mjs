@@ -1,5 +1,5 @@
 // Fake players for rehearsing / load testing.
-//   npm run bots                 → 8 bots on http://localhost:3000
+//   npm run bots                 → 18 bots on http://localhost:3000
 //   npm run bots -- 40 http://192.168.1.5:3000
 import { io } from "socket.io-client";
 
@@ -21,9 +21,11 @@ for (let i = 0; i < count; i++) {
 	let answeredIndex = -1;
 	let joining = false;
 	const join = (teams) => {
-		// With teams set up, bots fill them three by three (A1 → team 1, A2 → team 2…).
-		const open = teams.filter((t) => t.count < 3);
-		const wanted = teams[Math.floor(i / 3) % Math.max(teams.length, 1)];
+		// With teams set up, bots are spread evenly over the teams (consecutive bots in the same team).
+		const max = teams[0]?.max ?? 3;
+		const perTeam = Math.max(1, Math.min(max, Math.ceil(count / Math.max(teams.length, 1))));
+		const open = teams.filter((t) => t.count < (t.max ?? 3));
+		const wanted = teams[Math.floor(i / perTeam) % Math.max(teams.length, 1)];
 		const teamId = open.includes(wanted) ? wanted.id : open[0]?.id;
 		joining = true;
 		socket.emit("player:join", { name, token, teamId }, (r) => {

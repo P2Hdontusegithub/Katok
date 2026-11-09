@@ -214,7 +214,14 @@ body.host { overflow: hidden; }
 .race-row[data-rank='1'] .rl-rank { background: #ffd447; }
 .race-row[data-rank='2'] .rl-rank { background: #d9dde6; }
 .race-row[data-rank='3'] .rl-rank { background: #f0b07a; }
-.rl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.1; }
+.rl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-sub { font-size: 0.55em; font-weight: 700; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-sub:empty { display: none; }
+/* Team view: few, big lanes. */
+.race.teams { --label-w: clamp(240px, 26vw, 420px); }
+.race.teams .race-row { flex-basis: 56px; max-height: 170px; }
+.race.teams .rl { font-size: clamp(1rem, calc(var(--lane-h) * 0.3), 2.1rem); border-left-width: 14px; }
 .rl-score { color: var(--bg-2); font-variant-numeric: tabular-nums; }
 .race-row.offline .rl { opacity: 0.6; }
 /* Team mates sit in neighbouring lanes; a gap of grass separates the groups. */
@@ -392,3 +399,25 @@ body.host { overflow: hidden; }
 .aw-card .aw-name { font-size: clamp(1.3rem, 2vw, 1.9rem); max-width: 100%; }
 .aw-card .aw-value { font-size: 1.4rem; text-align: center; }
 .aw-card .aw-detail { font-size: 1rem; }
+
+/* ───── Team view ───── */
+.team-card.big ul { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); max-height: 30vh; overflow-y: auto; }
+.team-card.big li { font-size: 0.9rem; min-height: 26px; gap: 4px; }
+.team-card.big li .horse { width: 28px; }
+.set-picker { flex-wrap: wrap; }
+.set-picker .set-select { min-width: min(320px, 100%); }
+.mode-pick { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.set-picker .mode-select { flex: none; width: auto; }
+.board.team-board { display: grid; grid-template-columns: 1fr minmax(240px, 24vw); grid-template-rows: auto 1fr; }
+.board.team-board .board-title { grid-column: 1 / -1; }
+.board:not(.team-board) .top-players { display: none; }
+.team-board .results { font-size: clamp(1.2rem, 2.1vw, 2.2rem); }
+.team-board .results td { padding: 14px 18px; }
+.team-board .results small { font-size: 0.6em; color: var(--ink-soft); }
+.top-players { min-height: 0; overflow-y: auto; background: rgba(255, 255, 255, 0.14); border-radius: 22px; padding: 14px 16px; }
+.top-players h2 { font-size: 1.3rem; margin: 0 0 8px; }
+.top-players ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.top-players li { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.14); border-left: 6px solid var(--pc); border-radius: 10px; padding: 4px 10px; font-weight: 800; }
+.top-players li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-players li small { opacity: 0.75; font-weight: 600; }
+.top-players li em { font-style: normal; color: var(--yellow); }

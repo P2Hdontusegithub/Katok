@@ -160,6 +160,7 @@ io.on('connection', (socket) => {
         case 'next': r = game.next(); break;
         case 'goto': r = game.goto(action.phase); break;
         case 'gotoEnd': r = game.gotoEnd(Number(action.index)); break;
+        case 'setDisplayMode': r = game.setDisplayMode(action.mode); break;
         case 'end': r = game.end(); break;
         case 'newGame': game.reset(true); break;
         case 'toLobby': game.reset(false); break;
