@@ -3,6 +3,7 @@ import { $, decorateBackground, toast } from '../common/dom';
 import { call, connect, connectionBanner } from '../common/net';
 import { isMuted, setMuted, sfx, startMusic, stopMusic, unlockAudio } from '../common/sound';
 import { confetti } from './confetti';
+import { JoinPanel } from './join';
 import { ManualPanel } from './manual';
 import { RaceTrack } from './race';
 import { boardView, finalView, getReadyView, lobbyView, questionView, raceView, teamFinalView, type Ctx, type View } from './views';
@@ -27,6 +28,7 @@ const ctx: Ctx = {
   },
 };
 const manual = new ManualPanel(ctx);
+const join = new JoinPanel(ctx);
 
 let state: HostState | null = null;
 let view: View | null = null;
@@ -127,6 +129,7 @@ function render(s: HostState) {
     view?.update(s);
   }
   manual.update(s);
+  join.update(s);
   renderBar(s);
 }
 
@@ -151,6 +154,7 @@ function renderBar(s: HostState) {
   $('#bar-set').textContent = s.setTitle || 'Ka-tok';
   $('#bar-q').textContent = s.question ? `Câu ${s.question.index + 1}/${s.question.total}` : '';
   $('#bar-players').textContent = `👥 ${s.players.filter((p) => p.connected || p.manual).length}/${s.players.length}`;
+  $<HTMLButtonElement>('#btn-join').hidden = s.phase === 'lobby';
   $<HTMLButtonElement>('#btn-race').hidden = !['reveal', 'leaderboard', 'teamfinal', 'final'].includes(s.phase);
   $<HTMLButtonElement>('#btn-board').hidden = !['race', 'teamfinal', 'final'].includes(s.phase);
 }
@@ -170,6 +174,7 @@ async function next() {
 
 nextBtn.onclick = next;
 $('#btn-manual').onclick = () => manual.toggle();
+$('#btn-join').onclick = () => join.toggle();
 $('#btn-race').onclick = () => ctx.send({ type: 'goto', phase: 'race' });
 $('#btn-board').onclick = () => ctx.send({ type: 'goto', phase: 'leaderboard' });
 $('#btn-full').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
@@ -224,7 +229,12 @@ document.addEventListener('keydown', (e) => {
   if (app.hidden) return;
   const typing = (e.target as HTMLElement).closest('input, textarea, select');
   if (e.key === 'Escape' && manual.open) return manual.toggle(false);
+  if (e.key === 'Escape' && join.open) return join.toggle(false);
   if (typing || manual.open) return;
+  if (e.key.toLowerCase() === 'j') {
+    if (state?.phase !== 'lobby') join.toggle();
+    return;
+  }
   if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') {
     e.preventDefault();
     if (!nextBtn.hidden && !nextBtn.disabled) next();

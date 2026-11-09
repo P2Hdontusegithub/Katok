@@ -298,6 +298,7 @@ Mỗi câu hỏi đi qua các màn hình theo thứ tự sau. Bấm nút lớn �
 - 🏇 / 📋: chuyển qua lại giữa đường đua và bảng điểm.
 - ✍️ (phím **M**): mở màn hình chấm điểm thủ công.
 - 🔊: bật/tắt âm thanh. ⛶ (phím **F**): bật/tắt toàn màn hình.
+- 📱 (phím **J**, ngoài sảnh): hiện lại mã QR và link tham gia thật to cho người đến muộn. Bấm **📌 Ghim** để giữ một mã QR nhỏ ở góc màn hình suốt trận.
 - ☰: kết thúc game sớm, ván mới (giữ người chơi, điểm về 0), về sảnh và xóa người chơi, xuất CSV, tải lại câu hỏi, đăng xuất.
 
 Có thể mở màn hình host trên **nhiều máy cùng lúc** (một máy nối máy chiếu, một laptop điều khiển). Mọi màn hình luôn đồng bộ với nhau.
