@@ -177,10 +177,13 @@ export class RaceTrack {
       r.nameEl.textContent = p.name;
       if (r.subEl.innerHTML !== (p.sub ?? '')) r.subEl.innerHTML = p.sub ?? '';
       r.row.classList.toggle('offline', !!p.offline);
-      r.from = r.pos;
+      // Not animated: snap for real. Leaving `from` at the old position made the frame loop slide the
+      // horse back over 3.4s, and a race opened mid-slide (e.g. "new game" then the first question
+      // ended at once) started from a stale score and showed negative gains.
+      if (!animate) r.from = r.pos = p.score;
+      else r.from = r.pos;
       r.to = p.score;
       r.delay = animate ? Math.random() * 280 : 0;
-      if (!animate) r.pos = p.score;
     }
     for (const [id, r] of this.runners) {
       if (!seen.has(id)) {
