@@ -1,6 +1,6 @@
 {
   "name": "ka-tok",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Ka-tok — trò chơi đố vui đua ngựa kiểu Kahoot, chạy local cho sự kiện onsite",
   "engines": {
