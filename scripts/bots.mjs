@@ -6,13 +6,31 @@ import { io } from "socket.io-client";
 const count = Number(process.argv[2] ?? 18);
 const url = process.argv[3] ?? `http://localhost:${process.env.PORT ?? 3000}`;
 const NAMES = [
-  'A1 - 1', 'A1 - 2', 'A1 - 3',
-  'A2 - 1', 'A2 - 2', 'A2 - 3',
-  'A3 - 1', 'A3 - 2', 'A3 - 3',
-  'A4 - 1', 'A4 - 2', 'A4 - 3',
-  'A5 - 1', 'A5 - 2', 'A5 - 3',
-  'A6 - 1', 'A6 - 2', 'A6 - 3'
+  'Lan', 'Minh', 'Hùng', 'Thảo', 'Tuấn', 'Vy', 'Khoa', 'Ngọc', 'Phúc', 'Trang',
+  'Đạt', 'Hà', 'Long', 'My', 'Quân', 'Linh', 'An', 'Bảo', 'Chi', 'Duy',
+  'Giang', 'Hoàng', 'Khánh', 'Kiên', 'Lam', 'Mai', 'Nam', 'Nhi', 'Như', 'Phong',
+  'Phương', 'Quỳnh', 'Sơn', 'Tâm', 'Thành', 'Thư', 'Tiến', 'Trâm', 'Trí', 'Trung',
+  'Tú', 'Uyên', 'Vân', 'Việt', 'Vinh', 'Yến', 'Ánh', 'Bình', 'Cường', 'Diệp',
+  'Đức', 'Hải', 'Hiếu', 'Hòa', 'Hồng', 'Hương', 'Huy', 'Hưng', 'Khôi', 'Lộc',
+  'Mạnh', 'Nga', 'Nghĩa', 'Nhân', 'Oanh', 'Phát', 'Quốc', 'Sang', 'Sinh', 'Thắng',
+  'Thiện', 'Thu', 'Thủy', 'Toàn', 'Trọng', 'Tuyết', 'Xuân', 'Bích', 'Cẩm', 'Châu',
+  'Đông', 'Gia', 'Hạnh', 'Hậu', 'Khang', 'Kiệt', 'Kim', 'Liên', 'Loan', 'Lương',
+  'Mỹ', 'Ngân', 'Nguyên', 'Nhung', 'Phú', 'Quyên', 'Sỹ', 'Thái', 'Thanh', 'Thịnh',
+  'Thúy', 'Trinh', 'Trường', 'Vỹ', 'Ái', 'Ân', 'Bằng', 'Bách', 'Cát', 'Công',
+  'Danh', 'Đăng', 'Điệp', 'Dũng', 'Dương', 'Hân', 'Hằng', 'Hào', 'Khả', 'Lâm',
+  'Lệ', 'Mẫn', 'Minh Anh', 'Minh Châu', 'Minh Đức', 'Minh Khang', 'Minh Quân', 'Gia Bảo', 'Gia Hân', 'Gia Linh',
+  'Hoàng Anh', 'Hoàng Nam', 'Hải Đăng', 'Hải Yến', 'Bảo Ngọc', 'Bảo Anh', 'Khánh Linh', 'Khánh Ngân', 'Tuấn Anh', 'Đức Anh',
+  'Phương Anh', 'Quỳnh Anh', 'Thanh Tâm', 'Thanh Trúc', 'Ngọc Anh', 'Ngọc Hà', 'Nhật Minh', 'Nhật Nam', 'Thiên An', 'Thiên Phúc'
 ];
+
+// [
+//  'A1 - 1', 'A1 - 2', 'A1 - 3',
+//  'A2 - 1', 'A2 - 2', 'A2 - 3',
+//  'A3 - 1', 'A3 - 2', 'A3 - 3',
+//  'A4 - 1', 'A4 - 2', 'A4 - 3',
+//  'A5 - 1', 'A5 - 2', 'A5 - 3',
+//  'A6 - 1', 'A6 - 2', 'A6 - 3'
+//];
 
 for (let i = 0; i < count; i++) {
 	const socket = io(url, { transports: ["websocket"] });
