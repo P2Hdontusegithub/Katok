@@ -286,7 +286,7 @@ body.host { overflow: hidden; }
 .final { display: flex; flex-direction: column; align-items: center; gap: 10px; overflow-y: auto; padding-bottom: 20px; }
 .final-title { font-size: clamp(2.4rem, 4.4vw, 4rem); font-weight: 800; }
 .podium { display: flex; align-items: flex-end; justify-content: center; gap: 18px; width: min(1000px, 100%); flex: none; height: 44vh; }
-.spot { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; text-align: center; }
+.spot { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; text-align: center; }
 .spot-horse { width: clamp(100px, 12vw, 190px); animation: dropIn 0.8s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
 .spot-name { font-weight: 800; font-size: clamp(1.3rem, 2.4vw, 2.3rem); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: popIn 0.6s both; }
 .spot-score { font-weight: 800; color: var(--yellow); font-size: 1.4rem; animation: popIn 0.6s both; }
@@ -307,10 +307,18 @@ body.host { overflow: hidden; }
 .spot.p3 .spot-block { animation-delay: 0s; }
 @keyframes rise { from { transform: scaleY(0); } }
 @keyframes dropIn { from { transform: translateY(-60px); opacity: 0; } }
-/* Team podium: the members stand together on one block. */
-.spot-horses { display: flex; justify-content: center; align-items: flex-end; width: 100%; }
-.spot-horses .spot-horse { width: clamp(64px, 7vw, 120px); margin: 0 -6px; animation-delay: inherit; }
-.spot-members { font-weight: 700; font-size: clamp(0.85rem, 1.2vw, 1.1rem); opacity: 0.9; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: popIn 0.6s both; }
+/* Team podium: one horse per team, member names wrap (best first) up to 3 lines. */
+/* Names take up to 3 lines: taller podium, lower blocks and a smaller horse so the winner stays under the title. */
+.team-final .podium { height: 54vh; }
+.team-final .spot-horse { width: clamp(80px, 8vw, 140px); }
+.team-final .spot.p1 .spot-block { height: 40%; }
+.team-final .spot.p2 .spot-block { height: 28%; }
+.team-final .spot.p3 .spot-block { height: 18%; }
+.spot-members {
+  flex: none; font-weight: 700; font-size: clamp(0.85rem, 1.2vw, 1.1rem); line-height: 1.3; opacity: 0.9; max-width: 100%;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+  animation: popIn 0.6s both;
+}
 .team-final .rest li small { opacity: 0.75; font-weight: 600; }
 .rest { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; width: min(1000px, 100%); }
 .rest li { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.14); padding: 6px 14px; border-radius: 12px; font-weight: 700; animation: slideUp 0.5s 2s both; }

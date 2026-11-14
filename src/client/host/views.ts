@@ -540,7 +540,7 @@ function renderTeamBoard(s: HostState, thead: HTMLElement, tbody: HTMLElement, a
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
-/** Team podium (shown before the individual one): the whole team stands on its block. */
+/** Team podium (shown before the individual one): one horse per team, members listed by contribution. */
 export function teamFinalView(stage: HTMLElement, s: HostState, ctx: Ctx): View {
   stage.innerHTML = `
     <div class="final team-final">
@@ -553,13 +553,20 @@ export function teamFinalView(stage: HTMLElement, s: HostState, ctx: Ctx): View 
   const rest = stage.querySelector<HTMLElement>('.rest')!;
   const update = (s: HostState) => {
     const byId = new Map(s.players.map((p) => [p.id, p]));
-    const names = (t: PublicTeam) => t.memberIds.map((id) => esc(byId.get(id)?.name ?? '')).join(' · ');
+    // Highest scorer first: the members who contributed most are the ones that fit on screen.
+    const names = (t: PublicTeam) =>
+      t.memberIds
+        .map((id) => byId.get(id))
+        .filter((p): p is PublicPlayer => !!p)
+        .sort((a, b) => b.score - a.score)
+        .map((p) => esc(p.name))
+        .join(' · ');
     const sorted = s.teams.filter((t) => t.memberIds.length).sort((a, b) => b.score - a.score);
     const rankOf = (t: PublicTeam) => 1 + sorted.filter((o) => o.score > t.score).length;
     const spot = (t: PublicTeam | undefined, place: number) =>
       t
         ? `<div class="spot p${place}" style="--pc:${playerColor(t.color)}">
-            <div class="spot-horses">${t.memberIds.map(() => `<div class="spot-horse">${horseSvg(t.color, place === 1 ? 'running' : '')}</div>`).join('')}</div>
+            <div class="spot-horse">${horseSvg(t.color, place === 1 ? 'running' : '')}</div>
             <div class="spot-name">${esc(t.name)}</div>
             <div class="spot-members">${names(t)}</div>
             <div class="spot-score">${fmtPoints(t.score)}</div>
